@@ -46,7 +46,8 @@ router.get('/categories', (_req, res) => res.json(all('SELECT id,name,slug FROM 
 router.get('/books', (req, res) => {
   const q = `%${String(req.query.q || '').trim().slice(0, 100)}%`;
   const categoryId = validId(req.query.category) ? Number(req.query.category) : null;
-  const books = all(`SELECT b.id,b.title,b.author,b.description,b.cover_color,b.cover_url,b.language,b.created_at,
+  const books = all(`SELECT b.id,b.title,b.author,b.description,b.cover_color,b.cover_url,b.gallery_json,b.language,b.created_at,
+      b.product_type,b.price,b.stock_qty,
       COALESCE(s.avg_rating,0) avg_rating, COALESCE(s.review_count,0) review_count, COALESCE(s.total_pages,0) total_pages,
       GROUP_CONCAT(DISTINCT c.name) categories
     FROM books b LEFT JOIN book_stats s ON s.id=b.id
@@ -134,6 +135,135 @@ router.post('/admin/books', requireAuth, requireAdmin, (req, res) => {
     return bookId;
   });
   return res.status(201).json({ id: addBook() });
+});
+
+router.post('/admin/products', requireAuth, requireAdmin, (req, res) => {
+  const title = String(req.body.title || '').trim();
+  const author = String(req.body.author || '').trim();
+  const type = String(req.body.product_type || 'novel');
+  const price = Number(req.body.price);
+  const stock = Number(req.body.stock_qty);
+  const coverUrl = String(req.body.cover_url || '').trim();
+  const gallery = Array.isArray(req.body.image_urls) ? req.body.image_urls.map((url) => String(url).trim()).filter(Boolean) : [];
+  if (!title || title.length > 200 || !author || author.length > 120 || !['novel', 'manga'].includes(type)
+      || !Number.isSafeInteger(price) || price < 1 || !Number.isSafeInteger(stock) || stock < 0
+      || (coverUrl && !/^https?:\/\//i.test(coverUrl)) || gallery.some((url) => !/^https?:\/\//i.test(url))) {
+    return res.status(400).json({ error: 'invalidProduct' });
+  }
+  const createProduct = db.transaction(() => {
+    const cover = coverUrl || gallery[0] || null;
+    const images = [...new Set([...(cover ? [cover] : []), ...gallery])];
+    const result = one(`INSERT INTO books(title,author,description,cover_color,cover_url,gallery_json,product_type,price,stock_qty,language)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(title, author, String(req.body.description || '').trim().slice(0, 3000),
+      /^#[\da-f]{6}$/i.test(req.body.cover_color) ? req.body.cover_color : '#347c69', cover, JSON.stringify(images),
+      type, price, stock, String(req.body.language || 'lo').slice(0, 10));
+    if (validId(req.body.category_id)) one('INSERT OR IGNORE INTO book_categories(book_id,category_id) VALUES(?,?)').run(result.lastInsertRowid, Number(req.body.category_id));
+    return result.lastInsertRowid;
+  });
+  return res.status(201).json({ id: createProduct() });
+});
+
+router.patch('/admin/products/:id', requireAuth, requireAdmin, (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ error: 'notFound' });
+  const price = Number(req.body.price);
+  const stock = Number(req.body.stock_qty);
+  if (!Number.isSafeInteger(price) || price < 1 || !Number.isSafeInteger(stock) || stock < 0) {
+    return res.status(400).json({ error: 'invalidProduct' });
+  }
+  const result = one('UPDATE books SET price=?,stock_qty=? WHERE id=? AND product_type IN (\'novel\',\'manga\')')
+    .run(price, stock, Number(req.params.id));
+  return result.changes ? res.json({ ok: true }) : res.status(404).json({ error: 'notFound' });
+});
+
+router.post('/orders', requireAuth, (req, res) => {
+  const customerName = String(req.body.customer_name || '').trim().slice(0, 120);
+  const phone = String(req.body.phone || '').trim();
+  const address = String(req.body.address || '').trim().slice(0, 1000);
+  const requested = req.body.items;
+  if (!customerName || !/^\+?[\d\s().-]{8,20}$/.test(phone) || !address || address.length < 8
+      || !Array.isArray(requested) || !requested.length || requested.length > 20) {
+    return res.status(400).json({ error: 'invalidOrder' });
+  }
+  const quantities = new Map();
+  for (const item of requested) {
+    const id = Number(item?.book_id);
+    const quantity = Number(item?.quantity);
+    if (!validId(id) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 20) return res.status(400).json({ error: 'invalidOrder' });
+    quantities.set(id, (quantities.get(id) || 0) + quantity);
+  }
+  try {
+    const createOrder = db.transaction(() => {
+      const lines = [...quantities].map(([id, quantity]) => {
+        const product = one('SELECT id,title,price,stock_qty,product_type FROM books WHERE id=? AND is_published=1').get(id);
+        if (!product || !['novel', 'manga'].includes(product.product_type) || product.price < 1) throw Object.assign(new Error('productUnavailable'), { publicError: 'productUnavailable', httpStatus: 409 });
+        if (product.stock_qty < quantity) throw Object.assign(new Error('insufficientStock'), { publicError: 'insufficientStock', httpStatus: 409 });
+        return { ...product, quantity };
+      });
+      const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+      if (!Number.isSafeInteger(total)) throw Object.assign(new Error('invalidOrder'), { publicError: 'invalidOrder', httpStatus: 400 });
+      const order = one('INSERT INTO orders(user_id,customer_name,phone,address,total_amount) VALUES(?,?,?,?,?)')
+        .run(req.user.id, customerName, phone, address, total);
+      const addLine = one('INSERT INTO order_items(order_id,book_id,quantity,unit_price) VALUES(?,?,?,?)');
+      const deduct = one('UPDATE books SET stock_qty=stock_qty-? WHERE id=? AND stock_qty>=?');
+      lines.forEach((line) => {
+        if (!deduct.run(line.quantity, line.id, line.quantity).changes) throw Object.assign(new Error('insufficientStock'), { publicError: 'insufficientStock', httpStatus: 409 });
+        addLine.run(order.lastInsertRowid, line.id, line.quantity, line.price);
+      });
+    return { id: order.lastInsertRowid, total_amount: total };
+    });
+    return res.status(201).json(createOrder.immediate());
+  } catch (error) {
+    if (error.publicError) return res.status(error.httpStatus).json({ error: error.publicError });
+    throw error;
+  }
+});
+
+router.get('/shop/products', (_req, res) => res.json(all(`SELECT id,title,price,stock_qty,cover_url,product_type,gallery_json
+  FROM books WHERE is_published=1 AND product_type IN ('novel','manga') AND price>0 ORDER BY title COLLATE NOCASE`).all()));
+
+router.get('/orders', requireAuth, (req, res) => res.json(all(`SELECT o.id,o.total_amount,o.status,o.created_at,
+    GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
+  FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
+  WHERE o.user_id=? GROUP BY o.id ORDER BY o.created_at DESC`).all(req.user.id)));
+
+router.get('/admin/dashboard', requireAuth, requireAdmin, (_req, res) => {
+  const inventory = one(`SELECT COUNT(*) AS product_count,COALESCE(SUM(stock_qty),0) AS units_in_stock,
+      COALESCE(SUM(CASE WHEN stock_qty BETWEEN 1 AND 5 THEN 1 ELSE 0 END),0) AS low_stock
+    FROM books WHERE product_type IN ('novel','manga') AND is_published=1`).get();
+  const sales = one(`SELECT COUNT(*) AS order_count,COALESCE(SUM(total_amount),0) AS revenue
+    FROM orders WHERE status!='cancelled'`).get();
+  const products = all(`SELECT id,title,author,product_type,price,stock_qty,cover_url,is_published
+    FROM books WHERE product_type IN ('novel','manga') ORDER BY title COLLATE NOCASE`).all();
+  const orders = all(`SELECT o.id,o.customer_name,o.phone,o.address,o.total_amount,o.status,o.created_at,
+      GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
+    FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
+    GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50`).all();
+  return res.json({ ...inventory, ...sales, products, orders });
+});
+
+router.patch('/admin/orders/:id/status', requireAuth, requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const status = String(req.body.status || '');
+  if (!validId(id) || !['processing', 'shipped', 'cancelled'].includes(status)) return res.status(400).json({ error: 'invalidOrderStatus' });
+  const updateStatus = db.transaction(() => {
+    const order = one('SELECT id,status FROM orders WHERE id=?').get(id);
+    if (!order) return null;
+    if (order.status === 'shipped' && status !== 'shipped') throw Object.assign(new Error('orderAlreadyShipped'), { publicError: 'orderAlreadyShipped' });
+    if (order.status === 'cancelled' && status !== 'cancelled') throw Object.assign(new Error('orderAlreadyCancelled'), { publicError: 'orderAlreadyCancelled' });
+    if (status === 'cancelled' && order.status !== 'cancelled') {
+      all('SELECT book_id,quantity FROM order_items WHERE order_id=?').all(id)
+        .forEach((line) => one('UPDATE books SET stock_qty=stock_qty+? WHERE id=?').run(line.quantity, line.book_id));
+    }
+    one('UPDATE orders SET status=? WHERE id=?').run(status, id);
+    return { ok: true };
+  });
+  try {
+    const result = updateStatus();
+    return result ? res.json(result) : res.status(404).json({ error: 'notFound' });
+  } catch (error) {
+    if (error.publicError) return res.status(409).json({ error: error.publicError });
+    throw error;
+  }
 });
 
 module.exports = router;

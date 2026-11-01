@@ -60,3 +60,25 @@ npm run dev
 - `POST /api/admin/books` (JWT role admin)
 
 ค่าจาก client ทุกจุดผูกเป็น parameter ของ prepared statement; ชื่อคอลัมน์/เงื่อนไข query ถูกกำหนดใน server. bcrypt ใช้ hash cost 12 และ JWT มีอายุ 7 วัน. Three.js โหลดด้วย ES module และ StPageFlip ใช้ browser build จาก CDN จึงต้องเชื่อมต่ออินเทอร์เน็ตตอนเปิดหน้า.
+
+## Design skill
+
+The local `impeccable` skill is in `.agents/skills/impeccable/SKILL.md`. In Codex, ask for it by name, such as “Use impeccable to refine the storefront.” To run one of its command-line helpers from the project root:
+
+```powershell
+npm run design -- context --target public/index.html
+npm run design -- animate public/index.html
+```
+
+The launcher keeps its verified engine cache in `.impeccable-cache/`. If the engine is not installed, run `npm run design -- engine-probe` from a terminal with network access, then retry the command. The skill's written guidance remains available in Codex even when its optional helper engine cannot download.
+
+## Store and inventory
+
+Admin users can create physical novels or manga from the dashboard. Add one cover URL and any number of additional image URLs (one per line). Orders require a signed-in account; stock is reduced atomically when an order is created and returned if an admin cancels that order. Checkout currently records cash-on-delivery orders; online payment is not connected. Application data is kept within 10 SQLite tables.
+
+Commerce API:
+
+- `POST /api/admin/products`, `PATCH /api/admin/products/:id` (admin manages novels, manga, prices, and stock)
+- `POST /api/orders`, `GET /api/orders` (signed-in customer places and views orders)
+- `GET /api/admin/dashboard`, `PATCH /api/admin/orders/:id/status` (admin reports and order management)
+- `GET /api/shop/products` refreshes live prices and stock for a customer's cart.

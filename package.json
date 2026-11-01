@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "design": "scripts\\impeccable.cmd",
     "db:admin": "node scripts/create-admin.js"
   },
   "keywords": [],

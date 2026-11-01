@@ -9,6 +9,7 @@ let currentPage = 1;
 let registering = false;
 let authToken = localStorage.getItem('ebook-token') || '';
 let currentUser = JSON.parse(localStorage.getItem('ebook-user') || 'null');
+let cart = JSON.parse(localStorage.getItem('ebook-cart') || '[]');
 let toastTimer;
 
 // ຄົ້ນຫາຄຳແປຈາກ lo.json; ບໍ່ສ້າງຂໍ້ຄວາມ UI ທົດແທນແບບ hard-code.
@@ -62,18 +63,29 @@ function updateAccount() {
     document.querySelector('#account-admin')?.remove();
     adminButton.id = 'account-admin';
     document.querySelector('.account').prepend(adminButton);
-  } else document.querySelector('#account-admin')?.remove();
+    const dashboardButton = document.createElement('button');
+    dashboardButton.className = 'quiet-button';
+    dashboardButton.textContent = t('nav.dashboard');
+    dashboardButton.id = 'account-dashboard';
+    dashboardButton.onclick = openDashboard;
+    document.querySelector('#account-dashboard')?.remove();
+    document.querySelector('.account').prepend(dashboardButton);
+  } else { document.querySelector('#account-admin')?.remove(); document.querySelector('#account-dashboard')?.remove(); }
+  renderCartCount();
 }
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 }
 function coverMarkup(book) {
   const color = /^#[\da-f]{6}$/i.test(book.cover_color || '') ? book.cover_color : '#347c69';
-  return `<div class="book-art" data-detail="${book.id}"><div class="book-object"><div class="book-spine"></div><div class="book-front" style="background:${color}"><span class="book-top">${escapeHtml(t('app.name'))}</span><span class="book-title">${escapeHtml(book.title)}</span><span class="book-author">${escapeHtml(book.author)}</span></div></div></div>`;
+  const art = book.cover_url
+    ? `<img class="book-cover-image" src="${escapeHtml(book.cover_url)}" alt="${escapeHtml(book.title)}" loading="lazy">`
+    : `<div class="book-front" style="background:${color}"><span class="book-top">${escapeHtml(t('app.name'))}</span><span class="book-title">${escapeHtml(book.title)}</span><span class="book-author">${escapeHtml(book.author)}</span></div>`;
+  return `<div class="book-art" data-detail="${book.id}"><div class="book-object"><div class="book-spine"></div>${art}</div></div>`;
 }
 function renderBooks() {
   const grid = document.querySelector('#book-grid');
-  grid.innerHTML = books.map((book) => `<article class="book-item">${coverMarkup(book)}<div class="book-meta" data-detail="${book.id}"><h3>${escapeHtml(book.title)}</h3><p>${escapeHtml(book.author)}</p><div class="rating">★ ${Number(book.avg_rating || 0).toFixed(1)} <span class="muted">(${book.review_count})</span></div></div></article>`).join('');
+  grid.innerHTML = books.map((book) => `<article class="book-item">${coverMarkup(book)}<div class="book-meta" data-detail="${book.id}"><h3>${escapeHtml(book.title)}</h3><p>${escapeHtml(book.author)}</p><div class="rating">★ ${Number(book.avg_rating || 0).toFixed(1)} <span class="muted">(${book.review_count})</span></div>${Number(book.price) > 0 ? `<p class="product-price">${formatMoney(book.price)} · ${Number(book.stock_qty) > 0 ? t('shop.inStock') : t('shop.outOfStock')}</p>` : ''}</div></article>`).join('');
   grid.querySelectorAll('[data-detail]').forEach((el) => el.addEventListener('click', () => showDetails(Number(el.dataset.detail))));
   document.querySelector('#book-count').textContent = new Intl.NumberFormat('lo-LA').format(books.length);
   document.querySelector('#empty-state').hidden = books.length > 0;
@@ -82,7 +94,9 @@ function renderBooks() {
 function renderCategories() {
   const markup = categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join('');
   document.querySelector('#category').insertAdjacentHTML('beforeend', markup);
-  document.querySelector('#admin-category').innerHTML = `<option value="">${escapeHtml(t('home.allCategories'))}</option>${markup}`;
+  const categorySelect = `<option value="">${escapeHtml(t('home.allCategories'))}</option>${markup}`;
+  document.querySelector('#admin-category').innerHTML = categorySelect;
+  document.querySelector('#product-category').innerHTML = categorySelect;
 }
 async function loadBooks() {
   books = await api(`/books?q=${encodeURIComponent(document.querySelector('#search').value)}&category=${encodeURIComponent(document.querySelector('#category').value)}`);
@@ -127,13 +141,33 @@ async function showDetails(id) {
   try {
     selectedBook = books.find((book) => book.id === id) || await api(`/books/${id}`);
     const book = selectedBook;
-    document.querySelector('#detail-cover').style.background = book.cover_color;
-    document.querySelector('#detail-cover').textContent = book.title;
+    const detailCover = document.querySelector('#detail-cover');
+    detailCover.style.background = book.cover_color;
+    detailCover.replaceChildren();
+    if (book.cover_url) {
+      const image = document.createElement('img');
+      image.src = book.cover_url;
+      image.alt = book.title;
+      detailCover.append(image);
+    } else detailCover.textContent = book.title;
+    const gallery = document.querySelector('#detail-gallery');
+    let galleryImages = [];
+    try { galleryImages = JSON.parse(book.gallery_json || '[]'); } catch { galleryImages = []; }
+    if (book.cover_url && !galleryImages.includes(book.cover_url)) galleryImages.unshift(book.cover_url);
+    gallery.innerHTML = galleryImages.map((url, index) => `<button type="button" class="gallery-thumb ${index === 0 ? 'selected' : ''}" data-gallery-image="${index}" aria-label="${escapeHtml(book.title)} ${index + 1}"><img src="${escapeHtml(url)}" alt=""></button>`).join('');
+    gallery.querySelectorAll('[data-gallery-image]').forEach((button) => button.onclick = () => {
+      const image = document.createElement('img'); image.src = galleryImages[Number(button.dataset.galleryImage)]; image.alt = book.title;
+      detailCover.replaceChildren(image); gallery.querySelectorAll('.gallery-thumb').forEach((thumb) => thumb.classList.toggle('selected', thumb === button));
+    });
     document.querySelector('#detail-category').textContent = book.categories || t('home.allCategories');
     document.querySelector('#detail-title').textContent = book.title;
     document.querySelector('#detail-author').textContent = `${t('book.author')}: ${book.author}`;
     document.querySelector('#detail-description').textContent = book.description || '';
-    document.querySelector('#detail-stats').textContent = `${t('book.pages')}: ${new Intl.NumberFormat('lo-LA').format(book.total_pages)} · ★ ${Number(book.avg_rating).toFixed(1)} (${book.review_count})`;
+    document.querySelector('#detail-stats').textContent = `${Number(book.total_pages) > 0 ? `${t('book.pages')}: ${new Intl.NumberFormat('lo-LA').format(book.total_pages)} · ` : ''}★ ${Number(book.avg_rating).toFixed(1)} (${book.review_count})`;
+    const physical = ['novel', 'manga'].includes(book.product_type);
+    document.querySelector('#read-start').hidden = physical;
+    document.querySelector('#add-to-cart').hidden = !physical || Number(book.stock_qty) < 1 || Number(book.price) < 1;
+    document.querySelector('#detail-price').textContent = physical ? `${formatMoney(book.price)} · ${Number(book.stock_qty) > 0 ? t('shop.inStock') + ': ' + book.stock_qty : t('shop.outOfStock')}` : '';
     document.querySelector('#review-list').innerHTML = '';
     const reviews = await api(`/books/${id}/reviews`);
     document.querySelector('#review-list').innerHTML = reviews.map((review) => `<div class="review"><b>${escapeHtml(review.username)} · ${'★'.repeat(review.rating)}</b><p>${escapeHtml(review.comment || '')}</p><small>${new Intl.DateTimeFormat('lo-LA', { dateStyle: 'medium' }).format(new Date(`${review.created_at.replace(' ', 'T')}Z`))}</small></div>`).join('');
@@ -245,11 +279,89 @@ async function createBook(event) {
     return { title: lines.shift() || '', content: lines.join('\n').trim() };
   }).filter((page) => page.content);
   try {
-    await api('/admin/books', { method: 'POST', body: JSON.stringify({ title: data.get('title'), author: data.get('author'), description: data.get('description'), cover_color: data.get('cover_color'), category_id: data.get('category_id'), language: 'lo', pages }) });
+    await api('/admin/books', { method: 'POST', body: JSON.stringify({ title: data.get('title'), author: data.get('author'), description: data.get('description'), cover_url: data.get('cover_url'), cover_color: data.get('cover_color'), category_id: data.get('category_id'), language: 'lo', pages }) });
     document.querySelector('#admin-dialog').close();
     event.currentTarget.reset();
     await loadBooks(); notify(t('admin.bookSaved'));
   } catch (error) { document.querySelector('#admin-error').textContent = error.message; }
+}
+function formatMoney(value) { return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(Number(value) || 0); }
+function saveCart() { localStorage.setItem('ebook-cart', JSON.stringify(cart)); renderCartCount(); }
+function renderCartCount() {
+  const count = cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const badge = document.querySelector('#cart-count');
+  if (badge) badge.textContent = new Intl.NumberFormat('lo-LA').format(count);
+}
+function addToCart(book) {
+  const existing = cart.find((item) => item.id === book.id);
+  if (existing) {
+    if (existing.quantity >= Number(book.stock_qty)) return notify(t('shop.insufficientStock'));
+    existing.quantity += 1;
+  } else cart.push({ id: book.id, title: book.title, price: Number(book.price), stock_qty: Number(book.stock_qty), cover_url: book.cover_url, quantity: 1 });
+  saveCart();
+  notify(t('common.success'));
+}
+function renderCart() {
+  const lines = document.querySelector('#cart-lines');
+  if (!cart.length) lines.innerHTML = `<p class="muted">${t('shop.emptyCart')}</p>`;
+  else lines.innerHTML = cart.map((item) => `<div class="cart-line"><div>${item.cover_url ? `<img src="${escapeHtml(item.cover_url)}" alt="">` : ''}<span><b>${escapeHtml(item.title)}</b><small>${formatMoney(item.price)}</small></span></div><label><span class="sr-only">${escapeHtml(item.title)}</span><input type="number" min="1" max="${Math.max(1, item.stock_qty)}" value="${item.quantity}" data-cart-qty="${item.id}"></label><button class="text-button" type="button" data-cart-remove="${item.id}">${t('shop.remove')}</button></div>`).join('');
+  const total = cart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
+  document.querySelector('#cart-total').textContent = `${t('shop.price').split(' ')[0]}: ${formatMoney(total)}`;
+  lines.querySelectorAll('[data-cart-qty]').forEach((input) => input.onchange = () => { const item = cart.find((line) => line.id === Number(input.dataset.cartQty)); if (!item) return; item.quantity = Math.max(1, Math.min(item.stock_qty, Number(input.value) || 1)); saveCart(); renderCart(); });
+  lines.querySelectorAll('[data-cart-remove]').forEach((button) => button.onclick = () => { cart = cart.filter((item) => item.id !== Number(button.dataset.cartRemove)); saveCart(); renderCart(); });
+  document.querySelector('#checkout-submit').disabled = !cart.length;
+}
+async function openCart() {
+  if (cart.length) {
+    try {
+      const latest = await api('/shop/products');
+      const byId = new Map(latest.map((item) => [item.id, item]));
+      const previousCount = cart.length;
+      cart = cart.filter((item) => byId.has(item.id) && byId.get(item.id).stock_qty > 0)
+        .map((item) => ({ ...item, ...byId.get(item.id), quantity: Math.min(item.quantity, byId.get(item.id).stock_qty) }));
+      saveCart();
+      if (cart.length < previousCount) notify(t('shop.productUnavailable'));
+    } catch (error) { notify(error.message); }
+  }
+  renderCart();
+  document.querySelector('#cart-dialog').showModal();
+}
+async function openDashboard() {
+  try {
+    const data = await api('/admin/dashboard');
+    document.querySelector('#dashboard-metrics').innerHTML = [
+      [t('shop.products'), data.product_count], [t('shop.units'), data.units_in_stock],
+      [t('shop.lowStock'), data.low_stock], [t('shop.orders'), data.order_count], [t('shop.revenue'), formatMoney(data.revenue)]
+    ].map(([label, value]) => `<div class="metric"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join('');
+    const inventory = document.querySelector('#inventory-list');
+    inventory.innerHTML = data.products.length ? data.products.map((product) => `<div class="inventory-row"><span><b>${escapeHtml(product.title)}</b><small>${t(product.product_type === 'manga' ? 'shop.manga' : 'shop.novel')}</small></span><label>${t('shop.price')}<input type="number" min="0" value="${product.price}" data-price="${product.id}"></label><label>${t('shop.stock')}<input type="number" min="0" value="${product.stock_qty}" data-stock="${product.id}"></label><button class="quiet-button" data-save-stock="${product.id}">${t('shop.saveStock')}</button></div>`).join('') : `<p class="muted">${t('shop.noProducts')}</p>`;
+    inventory.querySelectorAll('[data-save-stock]').forEach((button) => button.onclick = async () => {
+      const id = button.dataset.saveStock;
+      try { await api(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify({ price: Number(inventory.querySelector(`[data-price="${id}"]`).value), stock_qty: Number(inventory.querySelector(`[data-stock="${id}"]`).value) }) }); notify(t('common.success')); openDashboard(); loadBooks(); }
+      catch (error) { notify(error.message); }
+    });
+    const orderList = document.querySelector('#orders-list');
+    orderList.innerHTML = data.orders.length ? data.orders.map((order) => `<article class="order-row"><div><b>#${order.id} · ${escapeHtml(order.customer_name)}</b><p>${escapeHtml(order.items || '')}</p><small>${escapeHtml(order.phone)} · ${escapeHtml(order.address)}</small><strong>${formatMoney(order.total_amount)}</strong></div><label>${t('shop.orderStatus')}<select data-order-status="${order.id}" ${['shipped','cancelled'].includes(order.status) ? 'disabled' : ''}><option value="placed" ${order.status === 'placed' ? 'selected' : ''}>${t('shop.placed')}</option><option value="processing" ${order.status === 'processing' ? 'selected' : ''}>${t('shop.processing')}</option><option value="shipped" ${order.status === 'shipped' ? 'selected' : ''}>${t('shop.shipped')}</option><option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>${t('shop.cancelled')}</option></select></label></article>`).join('') : `<p class="muted">${t('shop.noOrders')}</p>`;
+    orderList.querySelectorAll('[data-order-status]').forEach((select) => select.onchange = async () => { try { await api(`/admin/orders/${select.dataset.orderStatus}/status`, { method: 'PATCH', body: JSON.stringify({ status: select.value }) }); notify(t('common.success')); openDashboard(); } catch (error) { notify(error.message); } });
+    document.querySelector('#dashboard-dialog').showModal();
+  } catch (error) { notify(error.message); }
+}
+async function createProduct(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  try {
+    await api('/admin/products', { method: 'POST', body: JSON.stringify({ title: data.get('title'), author: data.get('author'), description: data.get('description'), product_type: data.get('product_type'), price: Number(data.get('price')), stock_qty: Number(data.get('stock_qty')), cover_url: data.get('cover_url'), image_urls: String(data.get('image_urls') || '').split(/\r?\n/).map((url) => url.trim()).filter(Boolean), category_id: data.get('category_id'), language: 'lo' }) });
+    event.currentTarget.reset(); document.querySelector('#product-dialog').close(); await loadBooks(); notify(t('common.success'));
+  } catch (error) { document.querySelector('#product-error').textContent = t(`auth.${error.key}`) || error.message; }
+}
+async function submitOrder(event) {
+  event.preventDefault();
+  if (!authToken) { document.querySelector('#cart-dialog').close(); return openAuth(false); }
+  const data = new FormData(event.currentTarget);
+  try {
+    await api('/orders', { method: 'POST', body: JSON.stringify({ customer_name: data.get('customer_name'), phone: data.get('phone'), address: data.get('address'), items: cart.map((item) => ({ book_id: item.id, quantity: item.quantity })) }) });
+    cart = []; saveCart(); event.currentTarget.reset(); document.querySelector('#cart-dialog').close(); await loadBooks(); notify(t('shop.orderSuccess'));
+  } catch (error) { document.querySelector('#checkout-error').textContent = t(`shop.${error.key}`) || t(`auth.${error.key}`) || error.message; }
 }
 async function submitReview(event) {
   event.preventDefault();
@@ -270,6 +382,11 @@ function bindEvents() {
   document.querySelector('#read-start').onclick = () => openReader();
   document.querySelector('#review-form').addEventListener('submit', submitReview);
   document.querySelector('#admin-form').addEventListener('submit', createBook);
+  document.querySelector('#product-form').addEventListener('submit', createProduct);
+  document.querySelector('#dashboard-add-product').onclick = () => { document.querySelector('#dashboard-dialog').close(); document.querySelector('#product-dialog').showModal(); };
+  document.querySelector('#add-to-cart').onclick = () => { addToCart(selectedBook); document.querySelector('#detail-dialog').close(); openCart(); };
+  document.querySelector('#cart-open').onclick = openCart;
+  document.querySelector('#checkout-form').addEventListener('submit', submitOrder);
   document.querySelector('#bookmarks-open').onclick = () => openBookmarks();
   document.querySelector('#theme-toggle').onclick = () => { document.body.classList.toggle('dark'); localStorage.setItem('ebook-theme', document.body.classList.contains('dark') ? 'dark' : 'light'); };
   document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => document.querySelector(`#${button.dataset.close}`).close()));

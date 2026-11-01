@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS books (
   description  TEXT,
   cover_color  TEXT    NOT NULL DEFAULT '#3b5bdb',  -- สีปกสำหรับโมเดล 3D
   cover_url    TEXT,                                -- รูปปก (ถ้ามี)
+  gallery_json TEXT    NOT NULL DEFAULT '[]',
+  product_type TEXT    NOT NULL DEFAULT 'ebook' CHECK (product_type IN ('ebook','novel','manga')),
+  price        INTEGER NOT NULL DEFAULT 0 CHECK (price >= 0),
+  stock_qty    INTEGER NOT NULL DEFAULT 0 CHECK (stock_qty >= 0),
   language     TEXT    NOT NULL DEFAULT 'th',
   is_published INTEGER NOT NULL DEFAULT 1 CHECK (is_published IN (0,1)),
   created_at   TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -83,10 +87,34 @@ CREATE TABLE IF NOT EXISTS reading_progress (
   PRIMARY KEY (user_id, book_id)
 );
 
+-- 9) คำสั่งซื้อ (ใช้ตาราง books เป็นแคตตาล็อกร่วมกับ e-book)
+CREATE TABLE IF NOT EXISTS orders (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id        INTEGER NOT NULL REFERENCES users(id),
+  customer_name  TEXT NOT NULL,
+  phone          TEXT NOT NULL,
+  address        TEXT NOT NULL,
+  total_amount   INTEGER NOT NULL CHECK (total_amount >= 0),
+  status         TEXT NOT NULL DEFAULT 'placed' CHECK (status IN ('placed','processing','shipped','cancelled')),
+  created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10) สินค้าในคำสั่งซื้อพร้อมราคาขณะซื้อ
+CREATE TABLE IF NOT EXISTS order_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id    INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  book_id     INTEGER NOT NULL REFERENCES books(id),
+  quantity    INTEGER NOT NULL CHECK (quantity > 0),
+  unit_price  INTEGER NOT NULL CHECK (unit_price >= 0),
+  UNIQUE(order_id, book_id)
+);
+
 -- ---------- Index เพื่อให้ query เร็วขึ้น ----------
 CREATE INDEX IF NOT EXISTS idx_pages_book     ON pages(book_id, page_number);
 CREATE INDEX IF NOT EXISTS idx_reviews_book   ON reviews(book_id);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id, book_id);
+CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 
 -- ---------- View: สถิติคะแนนของแต่ละเล่ม ----------
 CREATE VIEW IF NOT EXISTS book_stats AS
