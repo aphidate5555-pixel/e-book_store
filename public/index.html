@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="lo">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f1e8">
+  <title></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js" defer></script>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#home" data-i18n-aria="app.name"><span class="brand-mark">ອ</span><span><b data-i18n="app.name"></b><small data-i18n="app.tagline"></small></span></a>
+    <nav><a href="#home" data-i18n="nav.home"></a><a href="#library" data-i18n="nav.library"></a></nav>
+    <div class="account"><button id="theme-toggle" class="icon-button" aria-label="ສະຫຼັບຮູບແບບ">◐</button><button id="bookmarks-open" class="quiet-button" data-i18n="reader.bookmarks"></button><button id="auth-open" class="primary-button" data-i18n="nav.login"></button></div>
+  </header>
+  <main id="home">
+    <section class="hero">
+      <div class="hero-copy"><p class="eyebrow" data-i18n="home.welcome"></p><h1 data-i18n="app.tagline"></h1><p class="hero-note" data-i18n="home.intro"></p><a class="primary-button" href="#library" data-i18n="home.explore"></a></div>
+      <div class="hero-stage"><div class="stage-orbit"></div><canvas id="hero-book" data-i18n-aria="book.coverPreview"></canvas><div class="stage-caption" data-i18n="book.rotateCover"></div></div>
+    </section>
+    <section class="library" id="library">
+      <div class="section-heading"><div><p class="eyebrow" data-i18n="nav.library"></p><h2 data-i18n="home.popular"></h2></div><span id="book-count" class="muted"></span></div>
+      <div class="filters"><label class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" data-i18n-placeholder="home.searchPlaceholder"></label><select id="category" data-i18n-aria="book.category"><option value="" data-i18n="home.allCategories"></option></select></div>
+      <div id="continue-section" class="continue-section" hidden><h2 data-i18n="home.continueReading"></h2><div id="continue-list" class="continue-list"></div></div>
+      <div id="book-grid" class="book-grid" aria-live="polite"></div>
+      <p id="empty-state" class="empty-state" hidden data-i18n="home.noResults"></p>
+    </section>
+  </main>
+  <footer><span data-i18n="app.name"></span><span data-i18n="footer.note"></span></footer>
+
+  <dialog id="auth-dialog" class="dialog"><form id="auth-form" class="dialog-card"><button type="button" class="close-button" data-close="auth-dialog" data-i18n-aria="common.close">×</button><p class="eyebrow" data-i18n="app.name"></p><h2 id="auth-title"></h2><div class="form-field"><label for="identity" data-i18n="auth.emailOrUsername"></label><input id="identity" name="identity" autocomplete="username" required></div><div id="register-fields" hidden><div class="form-field"><label for="new-username" data-i18n="auth.username"></label><input id="new-username" name="username" autocomplete="username"></div><div class="form-field"><label for="new-email" data-i18n="auth.email"></label><input id="new-email" name="email" type="email" autocomplete="email"></div></div><div class="form-field"><label for="password" data-i18n="auth.password"></label><input id="password" name="password" type="password" autocomplete="current-password" required minlength="8"></div><p id="auth-error" class="error-message" role="alert"></p><button class="primary-button full-button" type="submit" data-i18n="nav.login"></button><button class="text-button" type="button" id="auth-switch"></button></form></dialog>
+
+  <dialog id="reader-dialog" class="dialog reader-dialog"><div class="reader-shell"><div class="reader-head"><div><p class="eyebrow" data-i18n="reader.reading"></p><h2 id="reader-title"></h2></div><button type="button" class="close-button" data-close="reader-dialog" data-i18n-aria="common.close">×</button></div><div id="flipbook" class="flipbook"></div><div class="reader-controls"><button id="page-prev" class="quiet-button" data-i18n="reader.previous"></button><span id="page-label"></span><button id="bookmark-toggle" class="quiet-button" data-i18n="reader.addBookmark"></button><button id="page-next" class="primary-button" data-i18n="reader.next"></button></div></div></dialog>
+
+  <dialog id="detail-dialog" class="dialog"><div class="detail-card"><button type="button" class="close-button" data-close="detail-dialog" data-i18n-aria="common.close">×</button><div id="detail-cover" class="detail-cover"></div><div class="detail-copy"><p id="detail-category" class="eyebrow"></p><h2 id="detail-title"></h2><p id="detail-author" class="muted"></p><p id="detail-description"></p><p id="detail-stats" class="muted"></p><button id="read-start" class="primary-button" data-i18n="book.startReading"></button></div><section class="review-area"><h3 data-i18n="review.title"></h3><div id="review-list"></div><form id="review-form"><label for="rating" data-i18n="review.yourRating"></label><select id="rating"><option value="5">5 ★</option><option value="4">4 ★</option><option value="3">3 ★</option><option value="2">2 ★</option><option value="1">1 ★</option></select><textarea id="review-comment" rows="3" data-i18n-placeholder="review.writeComment"></textarea><button class="primary-button" type="submit" data-i18n="review.submit"></button></form></section></div></dialog>
+
+  <dialog id="admin-dialog" class="dialog"><form id="admin-form" class="dialog-card admin-card"><button type="button" class="close-button" data-close="admin-dialog" data-i18n-aria="common.close">×</button><p class="eyebrow" data-i18n="nav.admin"></p><h2 data-i18n="admin.addBook"></h2><label data-i18n="admin.bookTitle"></label><input name="title" required><label data-i18n="book.author"></label><input name="author" required><label data-i18n="book.description"></label><textarea name="description" rows="3"></textarea><label data-i18n="admin.coverColor"></label><input name="cover_color" type="color" value="#347c69"><label data-i18n="book.category"></label><select id="admin-category" name="category_id"></select><label data-i18n="admin.pagesText"></label><textarea name="pages_text" rows="8" required data-i18n-placeholder="admin.pagesPlaceholder"></textarea><p class="muted" data-i18n="admin.pagesHint"></p><p id="admin-error" class="error-message" role="alert"></p><button class="primary-button" type="submit" data-i18n="common.save"></button></form></dialog>
+
+  <dialog id="bookmarks-dialog" class="dialog"><div class="dialog-card"><button type="button" class="close-button" data-close="bookmarks-dialog" data-i18n-aria="common.close">×</button><h2 data-i18n="reader.bookmarks"></h2><div id="bookmark-list"></div></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

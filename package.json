@@ -1,0 +1,27 @@
+{
+  "name": "lao-3d-ebook-library",
+  "version": "1.0.0",
+  "description": "ຫໍສະໝຸດອີບຸກ 3D ດ້ວຍ Node.js, SQLite ແລະ Three.js",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:admin": "node scripts/create-admin.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.4.1",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "three": "^0.180.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
+  }
+}
