@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
+import { handleStaticApi } from './static-api.js';
 
 let strings = {};
+let staticMode = false;
 let currentLang = localStorage.getItem('ebook-lang') || 'lo';
 let books = [];
 let categories = [];
@@ -38,7 +40,7 @@ function applyTranslations() {
 async function switchLanguage(nextLang) {
   currentLang = nextLang;
   localStorage.setItem('ebook-lang', currentLang);
-  const file = currentLang === 'th' ? '/th.json' : '/lo.json';
+  const file = currentLang === 'th' ? './th.json' : './lo.json';
   strings = await fetch(file).then((r) => r.json()).catch(() => strings);
   applyTranslations();
   updateAccount();
@@ -47,9 +49,21 @@ async function switchLanguage(nextLang) {
 }
 
 async function api(url, options = {}) {
+  if (staticMode) return handleStaticApi(url, options);
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
-  const response = await fetch(`/api${url}`, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(`./api${url}`, { ...options, headers });
+  } catch {
+    staticMode = true;
+    return handleStaticApi(url, options);
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (response.status === 404 && !contentType.includes('application/json')) {
+    staticMode = true;
+    return handleStaticApi(url, options);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401 && authToken) signOut();
@@ -1173,7 +1187,7 @@ function bindEvents() {
 
 async function init() {
   try {
-    const langFile = currentLang === 'th' ? '/th.json' : '/lo.json';
+    const langFile = currentLang === 'th' ? './th.json' : './lo.json';
     strings = await fetch(langFile).then((response) => response.json());
     applyTranslations();
     updateAccount();
