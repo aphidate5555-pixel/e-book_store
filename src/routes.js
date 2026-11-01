@@ -8,6 +8,7 @@ const router = express.Router();
 const one = (sql) => db.prepare(sql);
 const all = (sql) => db.prepare(sql);
 const validId = (value) => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+const validAssetUrl = (url) => !url || /^https?:\/\//i.test(url) || (url.startsWith('/') && !url.startsWith('//'));
 
 router.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -21,7 +22,10 @@ router.post('/auth/register', (req, res) => {
   try {
     const result = one('INSERT INTO users(username,email,password_hash) VALUES(?,?,?)')
       .run(username, email, bcrypt.hashSync(password, 12));
-    return res.status(201).json({ token: makeToken({ id: result.lastInsertRowid, username, role: 'reader' }) });
+    return res.status(201).json({
+      token: makeToken({ id: result.lastInsertRowid, username, role: 'reader' }),
+      user: { id: result.lastInsertRowid, username, role: 'reader' },
+    });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ error: 'accountExists' });
     throw error;
@@ -43,18 +47,28 @@ function makeToken(user) {
 }
 
 router.get('/categories', (_req, res) => res.json(all('SELECT id,name,slug FROM categories ORDER BY id').all()));
+
 router.get('/books', (req, res) => {
   const q = `%${String(req.query.q || '').trim().slice(0, 100)}%`;
   const categoryId = validId(req.query.category) ? Number(req.query.category) : null;
+  const type = ['ebook', 'novel', 'manga'].includes(String(req.query.type || '')) ? String(req.query.type) : null;
+  const sort = String(req.query.sort || 'popular');
+
+  let orderBy = 'b.is_featured DESC, avg_rating DESC, b.created_at DESC';
+  if (sort === 'latest') orderBy = 'b.created_at DESC, b.id DESC';
+  else if (sort === 'price_asc') orderBy = 'b.price ASC, b.title COLLATE NOCASE ASC';
+  else if (sort === 'price_desc') orderBy = 'b.price DESC, b.title COLLATE NOCASE ASC';
+
   const books = all(`SELECT b.id,b.title,b.author,b.description,b.cover_color,b.cover_url,b.gallery_json,b.language,b.created_at,
-      b.product_type,b.price,b.stock_qty,
+      b.product_type,b.price,b.stock_qty,b.is_featured,
       COALESCE(s.avg_rating,0) avg_rating, COALESCE(s.review_count,0) review_count, COALESCE(s.total_pages,0) total_pages,
       GROUP_CONCAT(DISTINCT c.name) categories
     FROM books b LEFT JOIN book_stats s ON s.id=b.id
     LEFT JOIN book_categories bc ON bc.book_id=b.id LEFT JOIN categories c ON c.id=bc.category_id
-    WHERE b.is_published=1 AND (b.title LIKE ? OR b.author LIKE ?)
+    WHERE b.is_published=1 AND (b.title LIKE ? OR b.author LIKE ? OR b.description LIKE ?)
       AND (? IS NULL OR EXISTS(SELECT 1 FROM book_categories x WHERE x.book_id=b.id AND x.category_id=?))
-    GROUP BY b.id ORDER BY b.created_at DESC`).all(q, q, categoryId, categoryId);
+      AND (? IS NULL OR b.product_type=?)
+    GROUP BY b.id ORDER BY ${orderBy}`).all(q, q, q, categoryId, categoryId, type, type);
   return res.json(books);
 });
 
@@ -81,20 +95,39 @@ router.post('/books/:id/reviews', requireAuth, (req, res) => {
   const rating = Number(req.body.rating);
   if (!validId(req.params.id)) return res.status(400).json({ error: 'notFound' });
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'invalidRating' });
-  try {
-    one('INSERT INTO reviews(book_id,user_id,rating,comment) VALUES(?,?,?,?)')
-      .run(Number(req.params.id), req.user.id, rating, String(req.body.comment || '').trim().slice(0, 1000) || null);
-    return res.status(201).json({ ok: true });
-  } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ error: 'alreadyReviewed' });
-    throw error;
-  }
+  const comment = String(req.body.comment || '').trim().slice(0, 1000) || null;
+  one(`INSERT INTO reviews(book_id,user_id,rating,comment) VALUES(?,?,?,?)
+    ON CONFLICT(book_id,user_id) DO UPDATE SET rating=excluded.rating, comment=excluded.comment, created_at=CURRENT_TIMESTAMP`)
+    .run(Number(req.params.id), req.user.id, rating, comment);
+  return res.status(201).json({ ok: true });
+});
+
+router.get('/wishlist', requireAuth, (req, res) => {
+  const row = one('SELECT wishlist_json FROM users WHERE id=?').get(req.user.id);
+  let ids = [];
+  try { ids = JSON.parse(row?.wishlist_json || '[]').filter(validId).map(Number); } catch { ids = []; }
+  return res.json({ ids });
+});
+
+router.post('/wishlist/:bookId', requireAuth, (req, res) => {
+  const bookId = Number(req.params.bookId);
+  if (!validId(bookId)) return res.status(400).json({ error: 'notFound' });
+  const row = one('SELECT wishlist_json FROM users WHERE id=?').get(req.user.id);
+  let ids = [];
+  try { ids = JSON.parse(row?.wishlist_json || '[]').filter(validId).map(Number); } catch { ids = []; }
+  const index = ids.indexOf(bookId);
+  const wished = index === -1;
+  if (wished) ids.unshift(bookId);
+  else ids.splice(index, 1);
+  one('UPDATE users SET wishlist_json=? WHERE id=?').run(JSON.stringify(ids.slice(0, 100)), req.user.id);
+  return res.json({ wished, ids });
 });
 
 router.get('/books/:id/progress', requireAuth, (req, res) => {
   return res.json(one('SELECT last_page FROM reading_progress WHERE user_id=? AND book_id=?')
     .get(req.user.id, Number(req.params.id)) || { last_page: 1 });
 });
+
 router.put('/books/:id/progress', requireAuth, (req, res) => {
   const page = Number(req.body.page);
   if (!Number.isInteger(page) || page < 1) return res.status(400).json({ error: 'invalidPage' });
@@ -106,6 +139,7 @@ router.put('/books/:id/progress', requireAuth, (req, res) => {
 
 router.get('/bookmarks', requireAuth, (req, res) => res.json(all(`SELECT m.id,m.book_id,m.page_number,m.note,m.created_at,b.title
   FROM bookmarks m JOIN books b ON b.id=m.book_id WHERE m.user_id=? ORDER BY m.created_at DESC`).all(req.user.id)));
+
 router.post('/books/:id/bookmarks', requireAuth, (req, res) => {
   const page = Number(req.body.page);
   if (!Number.isInteger(page) || page < 1) return res.status(400).json({ error: 'invalidPage' });
@@ -113,6 +147,7 @@ router.post('/books/:id/bookmarks', requireAuth, (req, res) => {
     .run(req.user.id, Number(req.params.id), page, String(req.body.note || '').trim().slice(0, 200) || null);
   return res.status(201).json({ id: result.lastInsertRowid });
 });
+
 router.delete('/bookmarks/:id', requireAuth, (req, res) => {
   const result = one('DELETE FROM bookmarks WHERE id=? AND user_id=?').run(Number(req.params.id), req.user.id);
   return result.changes ? res.json({ ok: true }) : res.status(404).json({ error: 'notFound' });
@@ -120,13 +155,14 @@ router.delete('/bookmarks/:id', requireAuth, (req, res) => {
 
 router.post('/admin/books', requireAuth, requireAdmin, (req, res) => {
   const { title, author, description, cover_color, cover_url, language, category_id, pages } = req.body;
-  if (!String(title || '').trim() || !String(author || '').trim() || !Array.isArray(pages) || pages.length < 1 || pages.length > 300) {
+  const cleanCover = String(cover_url || '').trim();
+  if (!String(title || '').trim() || !String(author || '').trim() || !Array.isArray(pages) || pages.length < 1 || pages.length > 300 || !validAssetUrl(cleanCover)) {
     return res.status(400).json({ error: 'invalidBook' });
   }
   const addBook = db.transaction(() => {
     const result = one(`INSERT INTO books(title,author,description,cover_color,cover_url,language)
       VALUES(?,?,?,?,?,?)`).run(String(title).trim(), String(author).trim(), String(description || '').trim(),
-      /^#[0-9a-f]{6}$/i.test(cover_color) ? cover_color : '#347c69', String(cover_url || '').trim() || null,
+      /^#[0-9a-f]{6}$/i.test(cover_color) ? cover_color : '#266653', cleanCover || '/covers/web-craft.svg',
       String(language || 'lo').slice(0, 10));
     const bookId = result.lastInsertRowid;
     if (validId(category_id)) one('INSERT OR IGNORE INTO book_categories(book_id,category_id) VALUES(?,?)').run(bookId, Number(category_id));
@@ -147,15 +183,15 @@ router.post('/admin/products', requireAuth, requireAdmin, (req, res) => {
   const gallery = Array.isArray(req.body.image_urls) ? req.body.image_urls.map((url) => String(url).trim()).filter(Boolean) : [];
   if (!title || title.length > 200 || !author || author.length > 120 || !['novel', 'manga'].includes(type)
       || !Number.isSafeInteger(price) || price < 1 || !Number.isSafeInteger(stock) || stock < 0
-      || (coverUrl && !/^https?:\/\//i.test(coverUrl)) || gallery.some((url) => !/^https?:\/\//i.test(url))) {
+      || !validAssetUrl(coverUrl) || gallery.some((url) => !validAssetUrl(url))) {
     return res.status(400).json({ error: 'invalidProduct' });
   }
   const createProduct = db.transaction(() => {
-    const cover = coverUrl || gallery[0] || null;
+    const cover = coverUrl || gallery[0] || (type === 'manga' ? '/covers/thunder-blade.svg' : '/covers/mekong-moon.svg');
     const images = [...new Set([...(cover ? [cover] : []), ...gallery])];
     const result = one(`INSERT INTO books(title,author,description,cover_color,cover_url,gallery_json,product_type,price,stock_qty,language)
       VALUES(?,?,?,?,?,?,?,?,?,?)`).run(title, author, String(req.body.description || '').trim().slice(0, 3000),
-      /^#[\da-f]{6}$/i.test(req.body.cover_color) ? req.body.cover_color : '#347c69', cover, JSON.stringify(images),
+      /^#[\da-f]{6}$/i.test(req.body.cover_color) ? req.body.cover_color : '#266653', cover, JSON.stringify(images),
       type, price, stock, String(req.body.language || 'lo').slice(0, 10));
     if (validId(req.body.category_id)) one('INSERT OR IGNORE INTO book_categories(book_id,category_id) VALUES(?,?)').run(result.lastInsertRowid, Number(req.body.category_id));
     return result.lastInsertRowid;
@@ -170,7 +206,7 @@ router.patch('/admin/products/:id', requireAuth, requireAdmin, (req, res) => {
   if (!Number.isSafeInteger(price) || price < 1 || !Number.isSafeInteger(stock) || stock < 0) {
     return res.status(400).json({ error: 'invalidProduct' });
   }
-  const result = one('UPDATE books SET price=?,stock_qty=? WHERE id=? AND product_type IN (\'novel\',\'manga\')')
+  const result = one("UPDATE books SET price=?,stock_qty=? WHERE id=? AND product_type IN ('novel','manga')")
     .run(price, stock, Number(req.params.id));
   return result.changes ? res.json({ ok: true }) : res.status(404).json({ error: 'notFound' });
 });
@@ -209,7 +245,7 @@ router.post('/orders', requireAuth, (req, res) => {
         if (!deduct.run(line.quantity, line.id, line.quantity).changes) throw Object.assign(new Error('insufficientStock'), { publicError: 'insufficientStock', httpStatus: 409 });
         addLine.run(order.lastInsertRowid, line.id, line.quantity, line.price);
       });
-    return { id: order.lastInsertRowid, total_amount: total };
+      return { id: order.lastInsertRowid, total_amount: total };
     });
     return res.status(201).json(createOrder.immediate());
   } catch (error) {
@@ -221,7 +257,7 @@ router.post('/orders', requireAuth, (req, res) => {
 router.get('/shop/products', (_req, res) => res.json(all(`SELECT id,title,price,stock_qty,cover_url,product_type,gallery_json
   FROM books WHERE is_published=1 AND product_type IN ('novel','manga') AND price>0 ORDER BY title COLLATE NOCASE`).all()));
 
-router.get('/orders', requireAuth, (req, res) => res.json(all(`SELECT o.id,o.total_amount,o.status,o.created_at,
+router.get('/orders', requireAuth, (req, res) => res.json(all(`SELECT o.id,o.customer_name,o.phone,o.address,o.total_amount,o.status,o.created_at,
     GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
   FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
   WHERE o.user_id=? GROUP BY o.id ORDER BY o.created_at DESC`).all(req.user.id)));

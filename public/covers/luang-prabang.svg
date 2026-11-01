@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <defs>
+    <linearGradient id="bg7" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1b18"/>
+      <stop offset="50%" stop-color="#44372b"/>
+      <stop offset="100%" stop-color="#271f18"/>
+    </linearGradient>
+    <linearGradient id="gold7" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="840" fill="url(#bg7)"/>
+  <!-- Traditional Mandala / Stupa Geometry -->
+  <g transform="translate(300, 410)" fill="none" stroke="url(#gold7)">
+    <circle r="150" stroke-width="1.5" opacity="0.4"/>
+    <circle r="120" stroke-width="2" stroke-dasharray="4 8"/>
+    <rect x="-85" y="-85" width="170" height="170" stroke-width="2" transform="rotate(45)"/>
+    <rect x="-85" y="-85" width="170" height="170" stroke-width="2"/>
+    <polygon points="0,-105 32,-32 105,0 32,32 0,105 -32,32 -105,0 -32,-32" fill="url(#gold7)" fill-opacity="0.22" stroke-width="2.5"/>
+    <circle r="24" fill="url(#gold7)"/>
+  </g>
+  <!-- Frame -->
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="url(#gold7)" stroke-width="2.5" opacity="0.8"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#fde68a" stroke-width="0.8" opacity="0.4"/>
+  <!-- Typography -->
+  <text x="300" y="108" text-anchor="middle" fill="#fcd34d" font-family="Georgia, serif" font-size="14" letter-spacing="5">HERITAGE ARCHITECTURE</text>
+  <text x="300" y="172" text-anchor="middle" fill="#ffffff" font-family="'Noto Sans Lao', sans-serif" font-size="44" font-weight="800">ມໍລະດົກຫຼວງພະບາງ</text>
+  <text x="300" y="214" text-anchor="middle" fill="#fde68a" font-family="Georgia, serif" font-size="20" font-style="italic">Sacred Art &amp; Timeless Temples</text>
+  <text x="300" y="695" text-anchor="middle" fill="#e7e5e4" font-family="'Noto Sans Lao', sans-serif" font-size="18">ບັນທຶກສິລະປະ ແລະ ສະຖາປັດຕະຍະກຳລ້ານຊ້າງ</text>
+  <text x="300" y="748" text-anchor="middle" fill="#fcd34d" font-family="'Noto Sans Lao', sans-serif" font-size="16" font-weight="700" letter-spacing="2">ສຸລິຍາ ວັດທະນະທຳ</text>
+</svg>

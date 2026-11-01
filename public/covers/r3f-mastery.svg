@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <defs>
+    <linearGradient id="bg8" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f291e"/>
+      <stop offset="50%" stop-color="#1b4332"/>
+      <stop offset="100%" stop-color="#081c15"/>
+    </linearGradient>
+    <radialGradient id="glow8" cx="50%" cy="42%" r="40%">
+      <stop offset="0%" stop-color="#52b788" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#081c15" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="840" fill="url(#bg8)"/>
+  <rect width="600" height="840" fill="url(#glow8)"/>
+  <!-- Three.js / R3F Scene Graph Nodes -->
+  <g transform="translate(300, 405)" stroke="#74c69d" fill="none">
+    <ellipse rx="150" ry="62" stroke-width="2" transform="rotate(-25)"/>
+    <ellipse rx="150" ry="62" stroke-width="2" transform="rotate(25)"/>
+    <ellipse rx="150" ry="62" stroke-width="2" stroke-dasharray="8 6" transform="rotate(90)"/>
+    <polygon points="0,-78 68,38 -68,38" stroke="#fef08a" stroke-width="2.5" fill="#40916c" fill-opacity="0.35"/>
+    <polygon points="0,78 68,-38 -68,-38" stroke="#fef08a" stroke-width="1.5" opacity="0.6"/>
+    <circle r="18" fill="#fef08a"/>
+  </g>
+  <rect x="34" y="34" width="532" height="772" fill="none" stroke="#74c69d" stroke-width="2" opacity="0.6"/>
+  <rect x="46" y="46" width="508" height="748" fill="none" stroke="#fef08a" stroke-width="0.8" opacity="0.4"/>
+  <text x="300" y="106" text-anchor="middle" fill="#95d5b2" font-family="sans-serif" font-size="14" font-weight="700" letter-spacing="5">3D GRAPHICS &amp; SHADERS</text>
+  <text x="300" y="172" text-anchor="middle" fill="#ffffff" font-family="'Noto Sans Lao', sans-serif" font-size="42" font-weight="800">ສ້າງໂລກ 3D ດ້ວຍ R3F</text>
+  <text x="300" y="214" text-anchor="middle" fill="#fef08a" font-family="Georgia, serif" font-size="20" font-style="italic">React Three Fiber &amp; Three.js Mastery</text>
+  <text x="300" y="695" text-anchor="middle" fill="#d8f3dc" font-family="'Noto Sans Lao', sans-serif" font-size="18">ເທັກນິກການສ້າງ 3D ເທິງເວັບໄຊໃຫ້ລື່ນໄຫຼ</text>
+  <text x="300" y="748" text-anchor="middle" fill="#fef08a" font-family="'Noto Sans Lao', sans-serif" font-size="16" font-weight="700" letter-spacing="2">ທີມພັດທະນາ 3D LAO</text>
+</svg>

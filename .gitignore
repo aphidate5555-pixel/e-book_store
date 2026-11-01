@@ -5,3 +5,5 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 data/*.log
 .impeccable-cache/
+__pycache__/
+*.pyc
