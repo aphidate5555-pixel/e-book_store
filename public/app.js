@@ -2105,7 +2105,7 @@ function animateFlyToCart(sourceEl, coverUrl) {
   const end = cartBtn.getBoundingClientRect();
   const clone = document.createElement('img');
   clone.className = 'fly-cover-clone';
-  clone.src = coverUrl || '/covers/mekong-moon.svg';
+  clone.src = coverUrl || './covers/mekong-moon.svg';
   clone.style.left = `${start.left}px`;
   clone.style.top = `${start.top}px`;
   document.body.appendChild(clone);
