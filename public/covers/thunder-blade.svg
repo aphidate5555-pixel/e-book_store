@@ -12,10 +12,10 @@
     </linearGradient>
   </defs>
   <rect width="600" height="840" fill="url(#bg4)"/>
-  <!-- Manga Speed Lines & Sunburst -->
+  <!-- Manga Speed Lines &amp; Sunburst -->
   <circle cx="300" cy="410" r="170" fill="#ef4444" opacity="0.22"/>
   <circle cx="300" cy="410" r="130" fill="#fef08a" opacity="0.9"/>
-  <!-- Dynamic Lightning & Katana Slash -->
+  <!-- Dynamic Lightning &amp; Katana Slash -->
   <polygon points="110,590 485,215 510,240 135,615" fill="url(#blade)"/>
   <polyline points="160,310 260,370 220,430 370,480 320,550 450,600" fill="none" stroke="#38bdf8" stroke-width="5"/>
   <polyline points="420,250 330,340 380,390 250,510" fill="none" stroke="#fde047" stroke-width="4"/>

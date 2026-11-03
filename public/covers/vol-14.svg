@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#76a9c5"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#e6673c" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#f7f3e8" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#e6673c" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">ສຸລິຍາ ວັດທະນະທຳ</text>
+  <text x="80" y="172" fill="#f7f3e8" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ນິທານດວງດາວລ່ອງແມ່ນ້ຳຂອງ</text>
+  <text x="80" y="214" fill="#e6673c" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ວັນນະຄະດີພື້ນບ້ານ</text>
+  <g transform="translate(300, 465)">
+    <path d="M-120,40 Q0,-90 120,40" stroke="#e6673c" stroke-width="4.5" fill="none"/><path d="M-95,75 Q0,-45 95,75" stroke="#f7f3e8" stroke-width="3.5" fill="none"/><path d="M-70,110 Q0,0 70,110" stroke="#e6673c" stroke-width="3" fill="none"/><circle cy="-48" r="18" fill="#e6673c"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#e6673c" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#f7f3e8" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#e6673c" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 14</text>
+</svg>

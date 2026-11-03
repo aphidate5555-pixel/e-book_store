@@ -211,12 +211,12 @@ router.patch('/admin/products/:id', requireAuth, requireAdmin, (req, res) => {
   return result.changes ? res.json({ ok: true }) : res.status(404).json({ error: 'notFound' });
 });
 
-router.post('/orders', requireAuth, (req, res) => {
+router.post('/orders', (req, res) => {
   const customerName = String(req.body.customer_name || '').trim().slice(0, 120);
-  const phone = String(req.body.phone || '').trim();
+  const phone = String(req.body.phone || '').trim().slice(0, 40);
   const address = String(req.body.address || '').trim().slice(0, 1000);
   const requested = req.body.items;
-  if (!customerName || !/^\+?[\d\s().-]{8,20}$/.test(phone) || !address || address.length < 8
+  if (!customerName || phone.length < 3 || !address || address.length < 2
       || !Array.isArray(requested) || !requested.length || requested.length > 20) {
     return res.status(400).json({ error: 'invalidOrder' });
   }
@@ -227,6 +227,23 @@ router.post('/orders', requireAuth, (req, res) => {
     if (!validId(id) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 20) return res.status(400).json({ error: 'invalidOrder' });
     quantities.set(id, (quantities.get(id) || 0) + quantity);
   }
+
+  // Resolve authenticated user if token is provided, or fall back to default reader account for guest checkout
+  let orderUserId = null;
+  const token = req.get('authorization')?.replace(/^Bearer\s+/i, '');
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, getSecret());
+      const existingUser = one('SELECT id FROM users WHERE id=?').get(Number(decoded?.id));
+      if (existingUser) orderUserId = existingUser.id;
+    } catch { /* allow guest checkout even if token is stale */ }
+  }
+  if (!orderUserId) {
+    const fallbackUser = one("SELECT id FROM users WHERE role='reader' ORDER BY id LIMIT 1").get()
+      || one('SELECT id FROM users ORDER BY id LIMIT 1').get();
+    orderUserId = fallbackUser?.id || 1;
+  }
+
   try {
     const createOrder = db.transaction(() => {
       const lines = [...quantities].map(([id, quantity]) => {
@@ -238,7 +255,7 @@ router.post('/orders', requireAuth, (req, res) => {
       const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
       if (!Number.isSafeInteger(total)) throw Object.assign(new Error('invalidOrder'), { publicError: 'invalidOrder', httpStatus: 400 });
       const order = one('INSERT INTO orders(user_id,customer_name,phone,address,total_amount) VALUES(?,?,?,?,?)')
-        .run(req.user.id, customerName, phone, address, total);
+        .run(orderUserId, customerName, phone, address, total);
       const addLine = one('INSERT INTO order_items(order_id,book_id,quantity,unit_price) VALUES(?,?,?,?)');
       const deduct = one('UPDATE books SET stock_qty=stock_qty-? WHERE id=? AND stock_qty>=?');
       lines.forEach((line) => {
@@ -257,10 +274,43 @@ router.post('/orders', requireAuth, (req, res) => {
 router.get('/shop/products', (_req, res) => res.json(all(`SELECT id,title,price,stock_qty,cover_url,product_type,gallery_json
   FROM books WHERE is_published=1 AND product_type IN ('novel','manga') AND price>0 ORDER BY title COLLATE NOCASE`).all()));
 
-router.get('/orders', requireAuth, (req, res) => res.json(all(`SELECT o.id,o.customer_name,o.phone,o.address,o.total_amount,o.status,o.created_at,
-    GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
-  FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
-  WHERE o.user_id=? GROUP BY o.id ORDER BY o.created_at DESC`).all(req.user.id)));
+router.get('/orders', (req, res) => {
+  const token = req.get('authorization')?.replace(/^Bearer\s+/i, '');
+  let userId = null;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, getSecret());
+      userId = Number(decoded?.id) || null;
+    } catch { /* ignore stale token */ }
+  }
+  const guestIds = String(req.query.ids || '')
+    .split(',')
+    .map((x) => Number(x.trim()))
+    .filter(validId)
+    .slice(0, 50);
+
+  if (userId && guestIds.length) {
+    const placeholders = guestIds.map(() => '?').join(',');
+    return res.json(all(`SELECT o.id,o.customer_name,o.phone,o.address,o.total_amount,o.status,o.created_at,
+        GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
+      FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
+      WHERE o.user_id=? OR o.id IN (${placeholders}) GROUP BY o.id ORDER BY o.created_at DESC`).all(userId, ...guestIds));
+  }
+  if (userId) {
+    return res.json(all(`SELECT o.id,o.customer_name,o.phone,o.address,o.total_amount,o.status,o.created_at,
+        GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
+      FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
+      WHERE o.user_id=? GROUP BY o.id ORDER BY o.created_at DESC`).all(userId));
+  }
+  if (guestIds.length) {
+    const placeholders = guestIds.map(() => '?').join(',');
+    return res.json(all(`SELECT o.id,o.customer_name,o.phone,o.address,o.total_amount,o.status,o.created_at,
+        GROUP_CONCAT(b.title || ' × ' || oi.quantity, ', ') AS items
+      FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN books b ON b.id=oi.book_id
+      WHERE o.id IN (${placeholders}) GROUP BY o.id ORDER BY o.created_at DESC`).all(...guestIds));
+  }
+  return res.json([]);
+});
 
 router.get('/admin/dashboard', requireAuth, requireAdmin, (_req, res) => {
   const inventory = one(`SELECT COUNT(*) AS product_count,COALESCE(SUM(stock_qty),0) AS units_in_stock,

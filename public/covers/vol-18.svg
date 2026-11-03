@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#4c3970"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#9ad3bf" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#f3ecdb" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#9ad3bf" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">ສຸລິຍາ ວັດທະນະທຳ</text>
+  <text x="80" y="172" fill="#f3ecdb" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ເຄື່ອງປັ້ນດິນເຜົາລ່ອງຂອງ</text>
+  <text x="80" y="214" fill="#9ad3bf" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ຫັດຖະກຳ</text>
+  <g transform="translate(300, 465)">
+    <ellipse rx="128" ry="48" transform="rotate(28)" stroke="#9ad3bf" stroke-width="3.5" fill="none"/><ellipse rx="128" ry="48" transform="rotate(-28)" stroke="#f3ecdb" stroke-width="3" fill="none"/><circle r="28" fill="#9ad3bf"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#9ad3bf" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#f3ecdb" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#9ad3bf" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 18</text>
+</svg>

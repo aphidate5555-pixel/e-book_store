@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#25282a"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#c84a3f" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#eee4ce" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#c84a3f" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">ຄຳພັນ ວົງດາລາ</text>
+  <text x="80" y="172" fill="#eee4ce" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ບັນທຶກການເດີນທາງພູພຽງບໍລະເວນ</text>
+  <text x="80" y="214" fill="#c84a3f" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ບັນທຶກເດີນທາງ</text>
+  <g transform="translate(300, 465)">
+    <rect x="-110" y="-110" width="220" height="220" stroke="#c84a3f" stroke-width="3.5" fill="none"/><rect x="-70" y="-70" width="140" height="140" stroke="#eee4ce" stroke-width="2" fill="none"/><circle cx="-70" cy="-70" r="10" fill="#c84a3f"/><circle cx="70" cy="-70" r="10" fill="#c84a3f"/><circle cx="-70" cy="70" r="10" fill="#c84a3f"/><circle cx="70" cy="70" r="10" fill="#c84a3f"/><circle r="22" fill="#c84a3f"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#c84a3f" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#eee4ce" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#c84a3f" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 10</text>
+</svg>

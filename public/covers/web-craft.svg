@@ -21,7 +21,7 @@
   <!-- Outer Editorial Frame -->
   <rect x="34" y="34" width="532" height="772" fill="none" stroke="url(#gold1)" stroke-width="2" opacity="0.65"/>
   <rect x="46" y="46" width="508" height="748" fill="none" stroke="#93c5fd" stroke-width="0.75" opacity="0.35"/>
-  <!-- 3D Wireframe Cube & Isometric Rings -->
+  <!-- 3D Wireframe Cube &amp; Isometric Rings -->
   <g transform="translate(300, 390)" stroke="url(#gold1)" fill="none">
     <circle r="155" stroke="#38bdf8" stroke-width="1" stroke-dasharray="6 8" opacity="0.5"/>
     <circle r="120" stroke-width="1.5" opacity="0.75"/>

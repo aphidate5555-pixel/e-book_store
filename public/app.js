@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { gsap } from 'gsap';
 import { handleStaticApi } from './static-api.js';
 
@@ -6,6 +7,7 @@ let strings = {};
 let staticMode = false;
 let currentLang = localStorage.getItem('ebook-lang') || 'lo';
 let books = [];
+let allCatalogBooks = [];
 let categories = [];
 let selectedBook = null;
 let heroStageBook = null;
@@ -18,13 +20,22 @@ let registering = false;
 let authToken = localStorage.getItem('ebook-token') || '';
 let currentUser = JSON.parse(localStorage.getItem('ebook-user') || 'null');
 let cart = JSON.parse(localStorage.getItem('ebook-cart') || '[]');
+let guestOrderIds = JSON.parse(localStorage.getItem('ebook-guest-orders') || '[]');
 let toastTimer;
 
-// React Three Fiber (R3F) Declarative Scene Controller State
+// "The Complete Shelf" & R3F Declarative Scene Controller State
 let r3fStage = null;
+let shelfManifest = null;
+let activeSlotIndex = 0;
+let inspectionMode = false;
+let scrollObserver = null;
+
+function lookupTranslation(key) {
+  return key.split('.').reduce((value, part) => value?.[part], strings);
+}
 
 function t(key) {
-  return key.split('.').reduce((value, part) => value?.[part], strings) || strings.common?.error || key;
+  return lookupTranslation(key) || strings.common?.error || key;
 }
 
 function applyTranslations() {
@@ -35,6 +46,8 @@ function applyTranslations() {
   document.title = t('app.name');
   const langBtn = document.querySelector('#lang-toggle');
   if (langBtn) langBtn.textContent = currentLang === 'lo' ? 'LA' : 'TH';
+  renderShelfMarkers();
+  updateShelfEditorialUI();
 }
 
 async function switchLanguage(nextLang) {
@@ -43,6 +56,7 @@ async function switchLanguage(nextLang) {
   const file = currentLang === 'th' ? './th.json' : './lo.json';
   strings = await fetch(file).then((r) => r.json()).catch(() => strings);
   applyTranslations();
+  r3fStage?.refreshTextures?.();
   updateAccount();
   renderBooks(false);
   loadContinueReading();
@@ -67,7 +81,11 @@ async function api(url, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401 && authToken) signOut();
-    const error = new Error(t(`auth.${body.error}`) || t(`shop.${body.error}`) || t(`common.${body.error}`) || t('common.error'));
+    const msg = lookupTranslation(`shop.${body.error}`)
+      || lookupTranslation(`auth.${body.error}`)
+      || lookupTranslation(`common.${body.error}`)
+      || t('common.error');
+    const error = new Error(msg);
     error.key = body.error;
     error.status = response.status;
     throw error;
@@ -96,7 +114,7 @@ function updateAccount() {
   button.textContent = currentUser ? `${t('nav.logout')} · ${currentUser.username}` : t('nav.login');
   button.onclick = () => (currentUser ? signOut() : openAuth(false));
   document.querySelector('#bookmarks-open').hidden = !currentUser;
-  document.querySelector('#orders-open').hidden = !currentUser;
+  document.querySelector('#orders-open').hidden = !currentUser && !guestOrderIds.length;
   if (currentUser?.role === 'admin') {
     const adminButton = document.createElement('button');
     adminButton.className = 'quiet-button';
@@ -154,6 +172,44 @@ function getDisplayedBooks() {
   return books;
 }
 
+function getShelfItems() {
+  return shelfManifest?.items || [];
+}
+
+function getActiveShelfItem() {
+  const items = getShelfItems();
+  return items[activeSlotIndex] || items[0] || null;
+}
+
+function getLinkedCatalogBook(shelfItem) {
+  const pool = allCatalogBooks.length ? allCatalogBooks : books;
+  if (!shelfItem) return pool[0] || null;
+  return pool.find((b) => b.id === Number(shelfItem.linkedBookId)) || pool[0] || null;
+}
+
+function renderShelfMarkers() {
+  const markersEl = document.querySelector('#shelf-markers');
+  if (!markersEl) return;
+  const items = getShelfItems();
+  if (!items.length) return;
+
+  markersEl.innerHTML = items.map((item, idx) => {
+    const title = currentLang === 'th' ? item.title_th : item.title_lo;
+    const num = String(item.slot).padStart(2, '0');
+    return `<button type="button" class="shelf-marker ${idx === activeSlotIndex ? 'active' : ''}" role="tab" aria-selected="${idx === activeSlotIndex}" data-shelf-slot="${idx}" title="${num} · ${escapeHtml(title)}">
+      <span class="shelf-marker-bar"></span>
+      <span class="shelf-marker-num">${num}</span>
+    </button>`;
+  }).join('');
+
+  markersEl.querySelectorAll('[data-shelf-slot]').forEach((btn) => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.shelfSlot);
+      selectShelfSlot(idx, false);
+    };
+  });
+}
+
 function renderHeroDock() {
   const dock = document.querySelector('#hero-dock');
   if (!dock) return;
@@ -173,23 +229,178 @@ function renderHeroDock() {
   });
 }
 
+function updateShelfEditorialUI() {
+  const item = getActiveShelfItem();
+  const book = getLinkedCatalogBook(item) || heroStageBook;
+  if (!item && !book) return;
+
+  const total = getShelfItems().length || 19;
+  const slotNum = String((item?.slot || activeSlotIndex + 1)).padStart(2, '0');
+  const totalNum = String(total).padStart(2, '0');
+  const titleText = item
+    ? (currentLang === 'th' ? item.title_th : item.title_lo)
+    : (book?.title || '');
+  const noteText = item
+    ? (currentLang === 'th' ? item.note_th : item.note_lo)
+    : (book?.description || '');
+  const quoteText = item
+    ? (currentLang === 'th' ? (item.quote_th || item.note_th) : (item.quote_lo || item.note_lo))
+    : (book?.description || '');
+
+  const experienceEl = document.querySelector('#shelf-experience');
+  if (experienceEl) {
+    experienceEl.classList.toggle('is-inspecting', inspectionMode);
+  }
+
+  const drawerEl = document.querySelector('#inspection-drawer');
+  if (drawerEl) {
+    drawerEl.setAttribute('aria-hidden', String(!inspectionMode));
+  }
+
+  const slotPill = document.querySelector('#shelf-slot-pill');
+  if (slotPill) {
+    slotPill.textContent = currentLang === 'th'
+      ? `เล่มที่ ${slotNum} / ${totalNum}`
+      : `ເຫຼັ້ມທີ ${slotNum} / ${totalNum}`;
+  }
+
+  const readout = document.querySelector('#shelf-scroll-readout');
+  if (readout) readout.textContent = `${slotNum} / ${totalNum}`;
+
+  const titleEl = document.querySelector('#shelf-active-title');
+  if (titleEl) titleEl.textContent = titleText;
+
+  const metaEl = document.querySelector('#shelf-active-meta');
+  if (metaEl) {
+    metaEl.textContent = item
+      ? `${item.author} · ${item.edition}`
+      : (book?.author || '');
+  }
+
+  const noteEl = document.querySelector('#shelf-active-note');
+  if (noteEl) noteEl.textContent = noteText;
+
+  const priceLabel = book
+    ? (book.product_type === 'ebook' ? t('book.freeEbook') : formatMoney(book.price))
+    : '';
+
+  const badge = document.querySelector('#hero-book-badge');
+  if (badge) badge.textContent = priceLabel;
+
+  const heroAction = document.querySelector('#hero-open-detail');
+  if (heroAction && book) {
+    heroAction.textContent = t('book.startReading');
+    heroAction.onclick = async () => {
+      selectedBook = book;
+      await openReader(book);
+    };
+  }
+
+  // Slide-in Inspection Drawer Fields
+  const inspectCounter = document.querySelector('#inspect-counter');
+  if (inspectCounter) inspectCounter.textContent = `${slotNum} / ${totalNum}`;
+
+  const inspectEdition = document.querySelector('#inspect-edition');
+  if (inspectEdition) inspectEdition.textContent = item?.edition || 'First Clothbound Edition';
+
+  const inspectTitle = document.querySelector('#inspect-title');
+  if (inspectTitle) inspectTitle.textContent = titleText;
+
+  const inspectAuthor = document.querySelector('#inspect-author');
+  if (inspectAuthor) inspectAuthor.textContent = item?.author || book?.author || '';
+
+  const inspectDesc = document.querySelector('#inspect-description');
+  if (inspectDesc) inspectDesc.textContent = noteText;
+
+  const inspectQuote = document.querySelector('#inspect-quote');
+  if (inspectQuote) inspectQuote.textContent = `“${quoteText}”`;
+
+  const inspectFormat = document.querySelector('#inspect-format');
+  if (inspectFormat) {
+    inspectFormat.textContent = currentLang === 'th'
+      ? 'ปกผ้าแข็ง · อีบุ๊กอ่านได้ทันที'
+      : 'ປົກຜ້າແຂງ · ອີບຸ໊ກອ່ານໄດ້ທັນທີ';
+  }
+
+  const inspectAvail = document.querySelector('#inspect-availability');
+  if (inspectAvail) inspectAvail.textContent = priceLabel;
+
+  const inspectReadBtn = document.querySelector('#inspect-read-btn');
+  if (inspectReadBtn && book) {
+    inspectReadBtn.onclick = async () => {
+      selectedBook = book;
+      await openReader(book);
+    };
+  }
+
+  const inspectDetailBtn = document.querySelector('#inspect-detail-btn');
+  if (inspectDetailBtn && book) {
+    inspectDetailBtn.onclick = () => showDetails(book.id);
+  }
+
+  const inspectBtn = document.querySelector('#shelf-inspect-toggle');
+  if (inspectBtn) {
+    inspectBtn.textContent = inspectionMode ? t('home.returnToShelf') : t('home.inspectBook');
+  }
+
+  const caption = document.querySelector('#stage-caption');
+  if (caption) {
+    caption.textContent = inspectionMode ? t('home.inspectHint') : t('home.shelfHint');
+  }
+
+  document.querySelectorAll('.shelf-marker').forEach((el) => {
+    const active = Number(el.dataset.shelfSlot) === activeSlotIndex;
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-selected', String(active));
+  });
+
+  if (book) {
+    heroStageBook = book;
+    document.querySelectorAll('.dock-item').forEach((el) => {
+      el.classList.toggle('active', Number(el.dataset.dockBook) === book.id);
+    });
+  }
+}
+
+function selectShelfSlot(slotIndex, enterInspection = false) {
+  const items = getShelfItems();
+  const maxIdx = Math.max(0, (items.length || 19) - 1);
+  activeSlotIndex = Math.max(0, Math.min(maxIdx, Math.round(slotIndex)));
+  if (enterInspection) {
+    inspectionMode = true;
+  }
+  const item = getActiveShelfItem();
+  const linked = getLinkedCatalogBook(item);
+  if (linked) heroStageBook = linked;
+  updateShelfEditorialUI();
+  if (r3fStage) {
+    r3fStage.focusSlot(activeSlotIndex, inspectionMode);
+  } else {
+    initOrUpdateR3FStage(heroStageBook || books[0]);
+  }
+}
+
+function setInspectionMode(enabled) {
+  inspectionMode = Boolean(enabled);
+  updateShelfEditorialUI();
+  if (r3fStage) {
+    r3fStage.setInspection(inspectionMode);
+  }
+}
+
 function setHeroStageBook(book) {
   if (!book) return;
   heroStageBook = book;
-  document.querySelectorAll('.dock-item').forEach((el) => {
-    el.classList.toggle('active', Number(el.dataset.dockBook) === book.id);
-  });
-  const badge = document.querySelector('#hero-book-badge');
-  if (badge) {
-    const label = book.product_type === 'ebook' ? t('book.freeEbook') : formatMoney(book.price);
-    badge.textContent = `${book.title} · ${label}`;
+  const items = getShelfItems();
+  const matchingIdx = items.findIndex((it) => Number(it.linkedBookId) === Number(book.id));
+  if (matchingIdx >= 0) {
+    activeSlotIndex = matchingIdx;
   }
-  const heroAction = document.querySelector('#hero-open-detail');
-  if (heroAction) {
-    heroAction.textContent = `${t('book.startReading')} — ${book.title}`;
-    heroAction.onclick = () => showDetails(book.id);
-  }
+  updateShelfEditorialUI();
   initOrUpdateR3FStage(book);
+  if (r3fStage) {
+    r3fStage.focusSlot(activeSlotIndex, inspectionMode);
+  }
 }
 
 function attachCard3DTilt(grid) {
@@ -213,6 +424,29 @@ function attachCard3DTilt(grid) {
       obj.style.setProperty('--ry', '-22deg');
       obj.style.setProperty('--rx', '3deg');
     });
+  });
+}
+
+function setupScrollMotionGraphics() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cards = document.querySelectorAll('.book-item');
+  if (scrollObserver) scrollObserver.disconnect();
+
+  scrollObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.remove('scroll-enter');
+          entry.target.classList.add('scroll-visible');
+        }
+      });
+    },
+    { threshold: 0.12, rootMargin: '0px 0px -30px 0px' }
+  );
+
+  cards.forEach((card) => {
+    card.classList.add('scroll-enter');
+    scrollObserver.observe(card);
   });
 }
 
@@ -261,6 +495,7 @@ function renderBooks(animateEntrance = true) {
     const book = books.find((b) => b.id === Number(btn.dataset.stagePick));
     if (book) {
       setHeroStageBook(book);
+      setInspectionMode(true);
       document.querySelector('#home')?.scrollIntoView({ behavior: 'smooth' });
     }
   }));
@@ -280,13 +515,24 @@ function renderBooks(animateEntrance = true) {
   }));
 
   attachCard3DTilt(grid);
+  setupScrollMotionGraphics();
 
   document.querySelector('#book-count').textContent = new Intl.NumberFormat(locale).format(displayed.length);
   document.querySelector('#empty-state').hidden = displayed.length > 0;
 
+  renderShelfMarkers();
   renderHeroDock();
-  if (!heroStageBook && books[0]) setHeroStageBook(books[0]);
-  else if (heroStageBook) setHeroStageBook(books.find((b) => b.id === heroStageBook.id) || books[0]);
+  if (!heroStageBook) {
+    const initialBook = getLinkedCatalogBook(getActiveShelfItem()) || books[0];
+    if (initialBook) {
+      heroStageBook = initialBook;
+      updateShelfEditorialUI();
+      initOrUpdateR3FStage(initialBook);
+    }
+  } else {
+    updateShelfEditorialUI();
+    initOrUpdateR3FStage(heroStageBook);
+  }
 
   if (animateEntrance && displayed.length && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     gsap.fromTo(
@@ -307,152 +553,1126 @@ function renderCategories() {
 }
 
 async function loadBooks() {
-  const q = encodeURIComponent(document.querySelector('#search').value);
-  const category = encodeURIComponent(document.querySelector('#category').value);
+  const qRaw = document.querySelector('#search').value.trim();
+  const categoryRaw = document.querySelector('#category').value;
+  const q = encodeURIComponent(qRaw);
+  const category = encodeURIComponent(categoryRaw);
   const sort = encodeURIComponent(document.querySelector('#sort-select')?.value || 'popular');
   const typeParam = ['ebook', 'novel', 'manga'].includes(activeTypeFilter) ? `&type=${activeTypeFilter}` : '';
   books = await api(`/books?q=${q}&category=${category}&sort=${sort}${typeParam}`);
+  if (!qRaw && !categoryRaw && !typeParam) {
+    allCatalogBooks = [...books];
+  } else if (!allCatalogBooks.length) {
+    allCatalogBooks = await api('/books?sort=popular').catch(() => [...books]);
+  }
   renderBooks(true);
 }
 
 // ============================================================================
-// React Three Fiber (R3F) & Drei Inspired 3D Stage Engine
-// Declarative Multi-Material Book Mesh + PBR Texture + Float + Dust Particles
+// "The Complete Shelf" — Three.js 19-Piece Clothbound Hardcover Library Engine
+// Exact Spine-to-Spine Flush Packing + 7-Part RoundedBoxGeometry Hardcovers +
+// 6-Stage Extraction Choreography + Left-Offset Inspection View
 // ============================================================================
-function createFallbackCoverTexture(book) {
+function drawEditorialCoverMotif(ctx, motif, w, h, accentColor, inkColor) {
+  ctx.save();
+  const cx = w * 0.5;
+  const cy = h * 0.53;
+  const r = w * 0.25;
+  ctx.strokeStyle = accentColor;
+  ctx.fillStyle = accentColor;
+  ctx.lineWidth = 4.5;
+
+  switch (motif) {
+    case 'corrosion':
+      for (let i = 0; i < 6; i++) {
+        ctx.globalAlpha = 0.85 - i * 0.11;
+        ctx.beginPath();
+        ctx.arc(cx + (i % 2 === 0 ? 18 : -18), cy + (i - 2.5) * 26, r * (0.95 - i * 0.11), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = inkColor;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'windows':
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 2; col++) {
+          const wx = cx - r * 0.76 + col * (r * 0.84);
+          const wy = cy - r * 0.95 + row * (r * 0.68);
+          ctx.strokeRect(wx, wy, r * 0.68, r * 0.54);
+          if ((row + col) % 2 === 0) {
+            ctx.fillRect(wx + 12, wy + 12, r * 0.68 - 24, r * 0.54 - 24);
+          }
+        }
+      }
+      break;
+    case 'network': {
+      const pts = [];
+      for (let i = 0; i < 9; i++) {
+        const ang = (i / 9) * Math.PI * 2;
+        const rad = i % 2 === 0 ? r * 0.92 : r * 0.48;
+        pts.push([cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad]);
+      }
+      ctx.beginPath();
+      pts.forEach(([x1, y1], i) => {
+        pts.slice(i + 1).forEach(([x2, y2], j) => {
+          if ((i + j) % 2 === 0) {
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+          }
+        });
+      });
+      ctx.stroke();
+      pts.forEach(([px, py], idx) => {
+        ctx.fillStyle = idx % 3 === 0 ? inkColor : accentColor;
+        ctx.beginPath();
+        ctx.arc(px, py, 9, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      break;
+    }
+    case 'wave':
+      for (let row = -4; row <= 4; row++) {
+        ctx.beginPath();
+        for (let x = -r; x <= r; x += 8) {
+          const y = cy + row * 28 + Math.sin((x / r) * Math.PI * 2 + row * 0.5) * 18;
+          if (x === -r) ctx.moveTo(cx + x, y);
+          else ctx.lineTo(cx + x, y);
+        }
+        ctx.stroke();
+      }
+      break;
+    case 'lattice':
+      for (let s = 0.28; s <= 1.05; s += 0.24) {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r * s);
+        ctx.lineTo(cx + r * s * 0.82, cy);
+        ctx.lineTo(cx, cy + r * s);
+        ctx.lineTo(cx - r * s * 0.82, cy);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      break;
+    case 'steps':
+      for (let st = 0; st < 6; st++) {
+        const sw = r * (1.55 - st * 0.22);
+        ctx.strokeRect(cx - sw * 0.5, cy + r * 0.78 - st * 38, sw, 30);
+      }
+      break;
+    case 'efficiency':
+      for (let i = -4; i <= 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * 26, cy - r * 0.95);
+        ctx.lineTo(cx + i * 26, cy + r * 0.95);
+        ctx.stroke();
+      }
+      ctx.fillStyle = inkColor;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case 'organization':
+      ctx.strokeRect(cx - r * 0.85, cy - r * 0.85, r * 1.7, r * 1.7);
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.85, cy);
+      ctx.lineTo(cx + r * 0.85, cy);
+      ctx.moveTo(cx, cy - r * 0.85);
+      ctx.lineTo(cx, cy + r * 0.85);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.42, cy - r * 0.42, r * 0.24, 0, Math.PI * 2);
+      ctx.arc(cx + r * 0.42, cy + r * 0.42, r * 0.24, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case 'fracture':
+      ctx.beginPath();
+      ctx.arc(cx - 10, cy, r * 0.78, Math.PI * 0.3, Math.PI * 1.3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx + 14, cy - 12, r * 0.78, -Math.PI * 0.7, Math.PI * 0.3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.7, cy + r * 0.7);
+      ctx.lineTo(cx + r * 0.7, cy - r * 0.7);
+      ctx.stroke();
+      break;
+    case 'circuit':
+      for (let ring = 1; ring <= 3; ring++) {
+        const rr = (r * ring) / 3.2;
+        ctx.strokeRect(cx - rr, cy - rr, rr * 2, rr * 2);
+      }
+      [-1, 1].forEach((dx) => {
+        [-1, 1].forEach((dy) => {
+          ctx.beginPath();
+          ctx.arc(cx + dx * r * 0.62, cy + dy * r * 0.62, 10, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+      break;
+    case 'maze':
+      for (let i = 1; i <= 5; i++) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, (r * i) / 5, (i * Math.PI) / 3, (i * Math.PI) / 3 + Math.PI * 1.55);
+        ctx.stroke();
+      }
+      break;
+    case 'boom':
+      for (let a = 0; a < 16; a++) {
+        const ang = (a * Math.PI) / 8;
+        const inner = a % 2 === 0 ? r * 0.2 : r * 0.42;
+        const outer = a % 2 === 0 ? r * 1.05 : r * 0.78;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(ang) * inner, cy + Math.sin(ang) * inner);
+        ctx.lineTo(cx + Math.cos(ang) * outer, cy + Math.sin(ang) * outer);
+        ctx.stroke();
+      }
+      break;
+    case 'runner':
+      for (let k = -2; k <= 2; k++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.75, cy + k * 34 + 36);
+        ctx.lineTo(cx + r * 0.15, cy + k * 34 - 28);
+        ctx.lineTo(cx + r * 0.8, cy + k * 34 - 28);
+        ctx.stroke();
+      }
+      break;
+    case 'flight':
+      for (let wing = 0; wing < 5; wing++) {
+        const wy = cy - r * 0.65 + wing * 42;
+        const span = r * (0.95 - wing * 0.12);
+        ctx.beginPath();
+        ctx.moveTo(cx - span, wy + 24);
+        ctx.quadraticCurveTo(cx, wy - 28, cx + span, wy + 24);
+        ctx.stroke();
+      }
+      break;
+    case 'schematic':
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.84, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeRect(cx - r * 0.58, cy - r * 0.58, r * 1.16, r * 1.16);
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy);
+      ctx.lineTo(cx + r, cy);
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx, cy + r);
+      ctx.stroke();
+      break;
+    case 'branches':
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + r * 0.95);
+      ctx.lineTo(cx, cy - r * 0.95);
+      ctx.stroke();
+      for (let b = -3; b <= 3; b++) {
+        const by = cy + b * 32;
+        ctx.beginPath();
+        ctx.moveTo(cx, by);
+        ctx.quadraticCurveTo(cx + 52, by - 26, cx + 96, by - 12);
+        ctx.moveTo(cx, by);
+        ctx.quadraticCurveTo(cx - 52, by - 26, cx - 96, by - 12);
+        ctx.stroke();
+      }
+      break;
+    case 'gather':
+      [-0.45, 0.45].forEach((ox) => {
+        [-0.45, 0.45].forEach((oy) => {
+          ctx.beginPath();
+          ctx.arc(cx + ox * r * 0.72, cy + oy * r * 0.72, r * 0.52, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+      });
+      break;
+    case 'orbit':
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+      for (let o = 0; o < 3; o++) {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r * 0.96, r * 0.36, (o * Math.PI) / 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    default:
+      // continuum
+      for (let tAng = 0; tAng < Math.PI * 2; tAng += Math.PI / 6) {
+        ctx.beginPath();
+        ctx.arc(
+          cx + Math.cos(tAng) * r * 0.36,
+          cy + Math.sin(tAng) * r * 0.36,
+          r * 0.52,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+      }
+      break;
+  }
+  ctx.restore();
+}
+
+function wrapCanvasLines(ctx, text, maxWidth) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  if (words.length <= 1) {
+    // Handle Lao/Thai continuous script by character chunks if needed
+    const str = String(text || '');
+    const lines = [];
+    let cur = '';
+    for (const ch of str) {
+      if (ctx.measureText(cur + ch).width > maxWidth && cur.length > 0) {
+        lines.push(cur);
+        cur = ch;
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines.slice(0, 3);
+  }
+  const lines = [];
+  let line = '';
+  words.forEach((word) => {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  });
+  if (line) lines.push(line);
+  return lines.slice(0, 3);
+}
+
+function createClothHardcoverTextures(item, maxAnisotropy = 4) {
+  const coverColor = item.cover || item.cloth?.color || '#243a4d';
+  const accentColor = item.accent || item.foil?.color || '#e0aa53';
+  const inkColor = item.ink || '#f3e9d2';
+  const motif = item.motif || item.foil?.motif || 'corrosion';
+  const title = currentLang === 'th' ? item.title_th : item.title_lo;
+  const note = currentLang === 'th' ? item.note_th : item.note_lo;
+  const quote = currentLang === 'th' ? (item.quote_th || note) : (item.quote_lo || note);
+
+  // 1. Front Cover Artwork Canvas (1024x1536)
+  const fc = document.createElement('canvas');
+  fc.width = 1024;
+  fc.height = 1536;
+  const fctx = fc.getContext('2d');
+
+  fctx.fillStyle = coverColor;
+  fctx.fillRect(0, 0, fc.width, fc.height);
+
+  // Subtle woven linen cloth grain
+  fctx.strokeStyle = 'rgba(255, 248, 234, 0.045)';
+  fctx.lineWidth = 1;
+  for (let x = 0; x < fc.width; x += 6) {
+    fctx.beginPath();
+    fctx.moveTo(x, 0);
+    fctx.lineTo(x, fc.height);
+    fctx.stroke();
+  }
+  for (let y = 0; y < fc.height; y += 6) {
+    fctx.beginPath();
+    fctx.moveTo(0, y);
+    fctx.lineTo(fc.width, y);
+    fctx.stroke();
+  }
+
+  // Left bookbinding hinge crease shadow
+  const hingeGrad = fctx.createLinearGradient(0, 0, 68, 0);
+  hingeGrad.addColorStop(0, 'rgba(0,0,0,0.34)');
+  hingeGrad.addColorStop(0.65, 'rgba(0,0,0,0.08)');
+  hingeGrad.addColorStop(1, 'rgba(255,255,255,0.05)');
+  fctx.fillStyle = hingeGrad;
+  fctx.fillRect(0, 0, 68, fc.height);
+
+  // Editorial double border
+  fctx.strokeStyle = accentColor;
+  fctx.lineWidth = 4;
+  fctx.strokeRect(64, 64, fc.width - 128, fc.height - 128);
+  fctx.globalAlpha = 0.45;
+  fctx.lineWidth = 1.6;
+  fctx.strokeRect(82, 82, fc.width - 164, fc.height - 164);
+  fctx.globalAlpha = 1;
+
+  // Top Author Header
+  fctx.fillStyle = accentColor;
+  fctx.font = '600 28px "Noto Sans Lao", "Noto Sans Thai", sans-serif';
+  fctx.textAlign = 'left';
+  fctx.fillText(String(item.author || 'E-BOOKSHOP PRESS').toUpperCase(), 118, 158);
+
+  // Title Block at Upper Left
+  fctx.fillStyle = inkColor;
+  fctx.font = '600 64px "Cormorant Garamond", "Noto Serif Lao", "Noto Serif Thai", serif';
+  const titleLines = wrapCanvasLines(fctx, title, fc.width - 236);
+  titleLines.forEach((line, i) => {
+    fctx.fillText(line, 118, 252 + i * 76);
+  });
+
+  // Procedural Editorial Motif in Lower-Middle Field
+  drawEditorialCoverMotif(fctx, motif, fc.width, fc.height, accentColor, inkColor);
+
+  // Bottom Edition & Press Footer
+  fctx.fillStyle = accentColor;
+  fctx.font = '500 24px "Cormorant Garamond", "Noto Serif Lao", "Noto Serif Thai", serif';
+  fctx.textAlign = 'left';
+  fctx.fillText('E-BOOKSHOP EDITIONS', 118, fc.height - 118);
+  fctx.textAlign = 'right';
+  fctx.fillText(`NO. ${String(item.slot).padStart(2, '0')}`, fc.width - 118, fc.height - 118);
+
+  const frontMap = new THREE.CanvasTexture(fc);
+  frontMap.colorSpace = THREE.SRGBColorSpace;
+  frontMap.anisotropy = maxAnisotropy;
+
+  // 2. Back Cover Artwork Canvas (512x768)
+  const bc = document.createElement('canvas');
+  bc.width = 512;
+  bc.height = 768;
+  const bctx = bc.getContext('2d');
+  bctx.fillStyle = coverColor;
+  bctx.fillRect(0, 0, bc.width, bc.height);
+
+  bctx.strokeStyle = accentColor;
+  bctx.globalAlpha = 0.55;
+  bctx.lineWidth = 2;
+  bctx.strokeRect(42, 42, bc.width - 84, bc.height - 84);
+  bctx.globalAlpha = 1;
+
+  bctx.fillStyle = inkColor;
+  bctx.font = 'italic 22px "Cormorant Garamond", "Noto Serif Lao", "Noto Serif Thai", serif';
+  bctx.textAlign = 'center';
+  const quoteLines = wrapCanvasLines(bctx, `“${quote}”`, bc.width - 140);
+  quoteLines.forEach((l, idx) => {
+    bctx.fillText(l, bc.width * 0.5, 290 + idx * 36);
+  });
+
+  bctx.fillStyle = accentColor;
+  bctx.font = '600 16px "Noto Sans Lao", "Noto Sans Thai", sans-serif';
+  bctx.fillText('E-BOOKSHOP · DIGITAL CLOTHBOUND LIBRARY', bc.width * 0.5, bc.height - 78);
+
+  const backMap = new THREE.CanvasTexture(bc);
+  backMap.colorSpace = THREE.SRGBColorSpace;
+  backMap.anisotropy = maxAnisotropy;
+
+  // 3. Spine Artwork Canvas (256x2048) — Crisp Vertical Typography & Accent Band
+  const sc = document.createElement('canvas');
+  sc.width = 256;
+  sc.height = 2048;
+  const sctx = sc.getContext('2d');
+
+  sctx.fillStyle = coverColor;
+  sctx.fillRect(0, 0, sc.width, sc.height);
+
+  // Top Accent Band & Fine Rules
+  sctx.fillStyle = accentColor;
+  sctx.fillRect(28, 72, sc.width - 56, 22);
+  sctx.fillRect(28, 108, sc.width - 56, 5);
+  sctx.fillRect(28, sc.height - 230, sc.width - 56, 6);
+
+  // Vertical Title & Author down the spine
+  sctx.save();
+  sctx.translate(sc.width * 0.5, sc.height * 0.48);
+  sctx.rotate(-Math.PI / 2);
+  sctx.textAlign = 'center';
+  sctx.textBaseline = 'middle';
+
+  sctx.fillStyle = inkColor;
+  sctx.font = '600 54px "Cormorant Garamond", "Noto Serif Lao", "Noto Serif Thai", serif';
+  sctx.fillText(String(title).slice(0, 28), -110, -18);
+
+  sctx.fillStyle = accentColor;
+  sctx.font = '500 32px "Noto Sans Lao", "Noto Sans Thai", sans-serif';
+  sctx.fillText(String(item.author || '').toUpperCase(), 380, 22);
+  sctx.restore();
+
+  // Bottom Press Monogram ("EB") + Volume Number
+  sctx.fillStyle = inkColor;
+  sctx.font = '700 44px "Cormorant Garamond", Georgia, serif';
+  sctx.textAlign = 'center';
+  sctx.fillText('EB', sc.width * 0.5, sc.height - 148);
+
+  sctx.fillStyle = accentColor;
+  sctx.font = '600 30px "Cormorant Garamond", Georgia, serif';
+  sctx.fillText(String(item.slot).padStart(2, '0'), sc.width * 0.5, sc.height - 96);
+
+  const spineMap = new THREE.CanvasTexture(sc);
+  spineMap.colorSpace = THREE.SRGBColorSpace;
+  spineMap.anisotropy = maxAnisotropy;
+
+  return { frontMap, backMap, spineMap };
+}
+
+function createLivingShimmerTexture(accentHex) {
   const c = document.createElement('canvas');
   c.width = 512;
-  c.height = 720;
+  c.height = 768;
   const ctx = c.getContext('2d');
-  const color = /^#[\da-f]{6}$/i.test(book.cover_color || '') ? book.cover_color : '#266653';
-  ctx.fillStyle = color;
+  const grad = ctx.createRadialGradient(256, 384, 24, 256, 384, 260);
+  grad.addColorStop(0, accentHex || '#ffd685');
+  grad.addColorStop(0.5, 'rgba(255, 220, 150, 0.22)');
+  grad.addColorStop(1, 'rgba(255, 220, 150, 0)');
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = 'rgba(253, 230, 138, 0.75)';
-  ctx.lineWidth = 6;
-  ctx.strokeRect(28, 28, c.width - 56, c.height - 56);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 38px "Noto Sans Lao", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(String(book.title || '').slice(0, 18), c.width / 2, 280);
-  ctx.fillStyle = '#fde68a';
-  ctx.font = '24px "Noto Sans Lao", sans-serif';
-  ctx.fillText(String(book.author || ''), c.width / 2, 580);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
-function initOrUpdateR3FStage(book) {
+function createWalnutWoodTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, c.width, 0);
+  grad.addColorStop(0, '#5a3925');
+  grad.addColorStop(0.5, '#6a442d');
+  grad.addColorStop(1, '#513220');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  ctx.strokeStyle = 'rgba(30, 16, 8, 0.28)';
+  ctx.lineWidth = 2;
+  for (let y = 0; y < c.height; y += 5) {
+    ctx.beginPath();
+    for (let x = 0; x <= c.width; x += 18) {
+      const wy = y + Math.sin(x * 0.025 + y * 0.08) * 3;
+      if (x === 0) ctx.moveTo(x, wy);
+      else ctx.lineTo(x, wy);
+    }
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 1);
+  return tex;
+}
+
+function createMultiPartBook(item, index, maxAnisotropy, pickMeshes) {
+  const root = new THREE.Group();
+  const width = 1.31 + ((index % 5) - 2) * 0.018;
+  const height = Number(item.height || item.dimensions?.height || 2.08);
+  const thickness = Number(item.thickness || item.dimensions?.thickness || 0.24);
+
+  const { frontMap, backMap, spineMap } = createClothHardcoverTextures(item, maxAnisotropy);
+
+  const clothMaterial = new THREE.MeshPhysicalMaterial({
+    color: item.cover || item.cloth?.color || '#243a4d',
+    roughness: 0.78,
+    metalness: 0.02,
+    sheen: 0.36,
+    sheenColor: new THREE.Color(item.ink || '#f3e9d2'),
+    sheenRoughness: 0.82,
+    clearcoat: 0.03,
+    clearcoatRoughness: 0.85,
+  });
+
+  const paperMaterial = new THREE.MeshStandardMaterial({
+    color: '#e9dfca',
+    roughness: 0.88,
+  });
+
+  // 1. Cream Page Block (recessed inside the cloth boards)
+  const pageBlock = new THREE.Mesh(
+    new RoundedBoxGeometry(
+      width - 0.075,
+      height - 0.105,
+      Math.max(0.08, thickness - 0.052),
+      3,
+      0.018
+    ),
+    paperMaterial
+  );
+  pageBlock.position.x = 0.018;
+  pageBlock.castShadow = true;
+  pageBlock.receiveShadow = true;
+  pageBlock.userData.slotIndex = index;
+
+  // 2 & 3. Beveled Front & Back Clothbound Boards
+  const boardGeometry = new RoundedBoxGeometry(width, height, 0.034, 4, 0.025);
+  const frontBoard = new THREE.Mesh(boardGeometry, clothMaterial);
+  frontBoard.position.z = thickness * 0.5;
+  frontBoard.castShadow = true;
+  frontBoard.receiveShadow = true;
+  frontBoard.userData.slotIndex = index;
+
+  const backBoard = new THREE.Mesh(boardGeometry, clothMaterial);
+  backBoard.position.z = -thickness * 0.5;
+  backBoard.castShadow = true;
+  backBoard.receiveShadow = true;
+  backBoard.userData.slotIndex = index;
+
+  // 4. Rounded Cloth Spine Casing
+  const spine = new THREE.Mesh(
+    new RoundedBoxGeometry(0.055, height - 0.01, thickness + 0.012, 3, 0.018),
+    clothMaterial
+  );
+  spine.position.x = -width * 0.5 + 0.022;
+  spine.castShadow = true;
+  spine.receiveShadow = true;
+  spine.userData.slotIndex = index;
+
+  // 5 & 6. Woven Headband & Tailband
+  const bandGeometry = new THREE.CylinderGeometry(0.017, 0.017, width - 0.1, 10);
+  const bandMaterial = new THREE.MeshStandardMaterial({
+    color: item.accent || item.foil?.color || '#e0aa53',
+    roughness: 0.65,
+  });
+  const headband = new THREE.Mesh(bandGeometry, bandMaterial);
+  headband.rotation.z = Math.PI * 0.5;
+  headband.position.set(0.01, height * 0.5 - 0.045, 0);
+
+  const tailband = headband.clone();
+  tailband.position.y = -height * 0.5 + 0.045;
+
+  // 7. Crisp Artwork Planes (Front Cover, Back Cover, Spine)
+  const frontArtwork = new THREE.Mesh(
+    new THREE.PlaneGeometry(width - 0.065, height - 0.065),
+    new THREE.MeshPhysicalMaterial({
+      map: frontMap,
+      roughness: 0.72,
+      metalness: 0.02,
+      sheen: 0.25,
+      sheenColor: new THREE.Color(item.ink || '#f3e9d2'),
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.85,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    })
+  );
+  frontArtwork.position.z = thickness * 0.5 + 0.019;
+  frontArtwork.userData.slotIndex = index;
+
+  let livingGlow = null;
+  if (item.living) {
+    livingGlow = new THREE.Mesh(
+      new THREE.PlaneGeometry(width - 0.11, height - 0.11),
+      new THREE.MeshBasicMaterial({
+        map: createLivingShimmerTexture(item.accent),
+        transparent: true,
+        opacity: 0.12,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    livingGlow.position.z = thickness * 0.5 + 0.0205;
+    root.add(livingGlow);
+  }
+
+  const backArtwork = new THREE.Mesh(
+    new THREE.PlaneGeometry(width - 0.08, height - 0.08),
+    new THREE.MeshStandardMaterial({
+      map: backMap,
+      roughness: 0.78,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    })
+  );
+  backArtwork.position.z = -thickness * 0.5 - 0.019;
+  backArtwork.rotation.y = Math.PI;
+  backArtwork.userData.slotIndex = index;
+
+  const spineArtwork = new THREE.Mesh(
+    new THREE.PlaneGeometry(Math.max(0.08, thickness - 0.02), height - 0.04),
+    new THREE.MeshStandardMaterial({
+      map: spineMap,
+      roughness: 0.75,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    })
+  );
+  spineArtwork.position.x = -width * 0.5 - 0.019;
+  spineArtwork.rotation.y = -Math.PI * 0.5;
+  spineArtwork.userData.slotIndex = index;
+
+  root.add(
+    pageBlock,
+    frontBoard,
+    backBoard,
+    spine,
+    headband,
+    tailband,
+    frontArtwork,
+    backArtwork,
+    spineArtwork
+  );
+
+  pickMeshes.push(pageBlock, frontBoard, backBoard, spine, frontArtwork, backArtwork, spineArtwork);
+
+  return {
+    root,
+    width,
+    height,
+    thickness,
+    livingGlow,
+    frontArtwork,
+    backArtwork,
+    spineArtwork,
+  };
+}
+
+function initOrUpdateR3FStage() {
   const canvas = document.querySelector('#hero-book');
-  if (!book || !canvas) return;
+  if (!canvas) return;
 
   if (!r3fStage) {
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.03;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-    camera.position.set(0, 0.1, 5.8);
+    scene.background = new THREE.Color('#eee8db');
+    scene.fog = new THREE.Fog('#eee8db', 11, 24);
 
-    // Studio & Reading-Room Lighting (<Environment> + <DirectionalLight> pattern)
-    scene.add(new THREE.AmbientLight(0xfff8eb, 1.85));
-    const keyLight = new THREE.DirectionalLight(0xffe4b5, 2.9);
-    keyLight.position.set(-3.5, 5, 6);
+    const camera = new THREE.PerspectiveCamera(27, 1, 0.08, 80);
+    camera.position.set(0, 1.42, 6.65);
+
+    // Warm Editorial Studio Lighting (matching play.mint.gg/complete-shelf)
+    const hemiLight = new THREE.HemisphereLight('#fff8ea', '#6e5848', 2.4);
+    hemiLight.position.set(0, 7, 2);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight('#fff6e7', 4.6);
+    keyLight.position.set(-4.2, 7.4, 5.5);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 0.8;
+    keyLight.shadow.camera.far = 20;
+    keyLight.shadow.camera.left = -8;
+    keyLight.shadow.camera.right = 8;
+    keyLight.shadow.camera.top = 5;
+    keyLight.shadow.camera.bottom = -4;
+    keyLight.shadow.bias = -0.0005;
     scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x99f6e4, 1.35);
-    rimLight.position.set(4, -2, -4);
+    const fillLight = new THREE.DirectionalLight('#c8d5e5', 2.1);
+    fillLight.position.set(5, 3, -4);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.PointLight('#d79b72', 1.2, 12);
+    rimLight.position.set(-3, 0.4, 3.2);
     scene.add(rimLight);
 
-    // Declarative <Float> & <PresentationControls> Root Group
-    const floatGroup = new THREE.Group();
-    scene.add(floatGroup);
-
-    const bookGroup = new THREE.Group();
-    bookGroup.rotation.y = -0.38;
-    floatGroup.add(bookGroup);
-
-    // Multi-Material 3D Book Geometry
-    const loader = new THREE.TextureLoader();
-    const frontMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.34, metalness: 0.06 });
-    const spineMat = new THREE.MeshStandardMaterial({ color: book.cover_color || '#266653', roughness: 0.58, metalness: 0.12 });
-    const paperMat = new THREE.MeshStandardMaterial({ color: '#f3ecdc', roughness: 0.92 });
-
-    // [right(pages), left(spine), top(pages), bottom(pages), front(cover), back(cover)]
-    const bookMaterials = [paperMat, spineMat, paperMat, paperMat, frontMat, spineMat];
-    const bookMesh = new THREE.Mesh(new THREE.BoxGeometry(1.78, 2.48, 0.22), bookMaterials);
-    bookGroup.add(bookMesh);
-
-    // Spine Ridge Accent
-    const spineCap = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 2.5, 0.25),
-      new THREE.MeshStandardMaterial({ color: '#142820', roughness: 0.5, metalness: 0.2 })
+    // Studio Wall & Floor Shadow Receivers
+    const wall = new THREE.Mesh(
+      new THREE.PlaneGeometry(36, 20),
+      new THREE.MeshStandardMaterial({ color: '#eee8db', roughness: 0.96 })
     );
-    spineCap.position.x = -0.88;
-    bookGroup.add(spineCap);
+    wall.position.set(0, 4.2, -2.55);
+    wall.receiveShadow = true;
+    scene.add(wall);
 
-    // Floating Reading-Room Firefly / Gold Dust Particles (<Sparkles> pattern)
-    const particleCount = 42;
-    const positions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 4.6;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 3.6;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 2.5;
-    }
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: 0xfde68a,
-      size: 0.055,
-      transparent: true,
-      opacity: 0.65,
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(36, 18),
+      new THREE.MeshStandardMaterial({ color: '#e6dfd1', roughness: 0.96 })
+    );
+    floor.rotation.x = -Math.PI * 0.5;
+    floor.position.set(0, -1.35, 0);
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const shelfRig = new THREE.Group();
+    scene.add(shelfRig);
+
+    const shelfGroup = new THREE.Group();
+    shelfRig.add(shelfGroup);
+
+    const booksGroup = new THREE.Group();
+    shelfRig.add(booksGroup);
+
+    const items = getShelfItems();
+    const totalCount = items.length || 19;
+    const maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 4);
+    const pickMeshes = [];
+    const bookRecords = [];
+
+    // Flush Spine-to-Spine Packing (cursorX advances by book thickness + 0.045)
+    let cursorX = 0;
+    items.forEach((item, index) => {
+      const thickness = Number(item.thickness || item.dimensions?.thickness || 0.24);
+      cursorX += thickness * 0.5;
+
+      const bookMesh = createMultiPartBook(item, index, maxAnisotropy, pickMeshes);
+      const slotGroup = new THREE.Group();
+      const baseY = 0.34 + bookMesh.height * 0.5;
+      slotGroup.position.set(cursorX, baseY, 0.04);
+      slotGroup.add(bookMesh.root);
+      booksGroup.add(slotGroup);
+
+      const isInitialActive = index === activeSlotIndex;
+      const initialZ = isInitialActive ? 0.40 : -0.64;
+      const initialYaw = isInitialActive ? 0 : Math.PI * 0.5;
+      const initialScale = isInitialActive ? 1.035 : 1.0;
+
+      bookMesh.root.position.z = initialZ;
+      bookMesh.root.rotation.y = initialYaw;
+      bookMesh.root.scale.setScalar(initialScale);
+
+      bookRecords.push({
+        index,
+        item,
+        slotGroup,
+        bookRoot: bookMesh.root,
+        livingGlow: bookMesh.livingGlow,
+        frontArtwork: bookMesh.frontArtwork,
+        backArtwork: bookMesh.backArtwork,
+        spineArtwork: bookMesh.spineArtwork,
+        width: bookMesh.width,
+        height: bookMesh.height,
+        thickness: bookMesh.thickness,
+        x: cursorX,
+        baseY,
+        hover: 0,
+        pose: {
+          x: 0,
+          y: 0,
+          z: initialZ,
+          yaw: initialYaw,
+          pitch: 0,
+          roll: 0,
+          scale: initialScale,
+        },
+      });
+
+      cursorX += thickness * 0.5 + 0.045;
     });
-    const sparkles = new THREE.Points(particleGeo, particleMat);
-    scene.add(sparkles);
+
+    // Center the packed book row around X = 0
+    const centerOffset = cursorX * 0.5;
+    bookRecords.forEach((rec) => {
+      rec.x -= centerOffset;
+      rec.slotGroup.position.x = rec.x;
+    });
+
+    // Build the Continuous Walnut Shelf Plank & Front Lip Molding sized to the packed row
+    const shelfSpan = Math.max(9.6, cursorX + 3.4);
+    const walnutTex = createWalnutWoodTexture();
+    const walnutMat = new THREE.MeshStandardMaterial({
+      map: walnutTex,
+      roughness: 0.62,
+      metalness: 0.05,
+    });
+    const darkWalnutMat = new THREE.MeshStandardMaterial({
+      color: '#462c1c',
+      roughness: 0.68,
+      metalness: 0.06,
+    });
+
+    const mainPlank = new THREE.Mesh(
+      new RoundedBoxGeometry(shelfSpan, 0.24, 2.35, 4, 0.03),
+      walnutMat
+    );
+    mainPlank.position.set(0, 0.22, -0.18);
+    mainPlank.castShadow = true;
+    mainPlank.receiveShadow = true;
+    shelfGroup.add(mainPlank);
+
+    const frontLip = new THREE.Mesh(
+      new RoundedBoxGeometry(shelfSpan + 0.06, 0.09, 0.14, 3, 0.02),
+      darkWalnutMat
+    );
+    frontLip.position.set(0, 0.275, 0.98);
+    frontLip.castShadow = true;
+    frontLip.receiveShadow = true;
+    shelfGroup.add(frontLip);
+
+    const underShadowBar = new THREE.Mesh(
+      new THREE.BoxGeometry(shelfSpan - 0.3, 0.16, 1.8),
+      darkWalnutMat
+    );
+    underShadowBar.position.set(0, 0.04, -0.28);
+    underShadowBar.receiveShadow = true;
+    shelfGroup.add(underShadowBar);
+
+    // 6-Stage Extraction & Shelving Choreography State
+    let presentedSlot = activeSlotIndex;
+    let queuedSlot = activeSlotIndex;
+    let choreoStage = 'idle';
+    let shelfScrollX = -bookRecords[activeSlotIndex]?.x || 0;
+    let shelfTargetX = shelfScrollX;
+    let hoveredSlot = -1;
+    let focusProgress = inspectionMode ? 1 : 0;
+
+    // Inspection View Orbit, Pan & Zoom State
+    let inspectYaw = -0.32;
+    let inspectPitch = 0.06;
+    let inspectPanX = 0;
+    let inspectPanY = 0;
+    let inspectDistance = 4.35;
+
+    let viewWidth = 1;
+    let viewHeight = 1;
+    let currentOffsetX = 0;
 
     const resize = () => {
-      const { width, height } = canvas.getBoundingClientRect();
-      if (!width || !height) return;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / Math.max(height, 1);
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      viewWidth = rect.width;
+      viewHeight = rect.height;
+      renderer.setSize(viewWidth, viewHeight, false);
+      camera.aspect = viewWidth / Math.max(viewHeight, 1);
       camera.updateProjectionMatrix();
     };
     resize();
     window.addEventListener('resize', resize);
 
-    let dragging = false;
+    // Pointer & Wheel Controls
+    let pointerDown = false;
+    let pointerButton = 0;
+    let dragMoved = false;
+    let startX = 0;
+    let startY = 0;
     let lastX = 0;
     let lastY = 0;
-    let targetRotY = -0.38;
-    let targetRotX = 0.06;
+    let dragAccumSlots = 0;
+
+    const raycaster = new THREE.Raycaster();
+    const pointerNDC = new THREE.Vector2();
+
+    const getHitSlot = (clientX, clientY) => {
+      const rect = canvas.getBoundingClientRect();
+      pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointerNDC, camera);
+      const hits = raycaster.intersectObjects(pickMeshes, false);
+      for (const hit of hits) {
+        const idx = hit.object.userData.slotIndex;
+        if (typeof idx === 'number' && bookRecords[idx]?.slotGroup.visible) {
+          return idx;
+        }
+      }
+      return -1;
+    };
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('pointerdown', (e) => {
-      dragging = true;
+      pointerDown = true;
+      pointerButton = e.button;
+      dragMoved = false;
+      startX = e.clientX;
+      startY = e.clientY;
       lastX = e.clientX;
       lastY = e.clientY;
+      dragAccumSlots = activeSlotIndex;
       canvas.setPointerCapture(e.pointerId);
     });
+
     canvas.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      targetRotY += (e.clientX - lastX) * 0.014;
-      targetRotX = Math.max(-0.45, Math.min(0.45, targetRotX + (e.clientY - lastY) * 0.008));
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
       lastX = e.clientX;
       lastY = e.clientY;
-    });
-    canvas.addEventListener('pointerup', () => { dragging = false; });
 
-    const animate = () => {
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const tNow = performance.now() * 0.001;
-      if (!dragging && !reduced) {
-        targetRotY += 0.0035;
-        floatGroup.position.y = Math.sin(tNow * 1.6) * 0.09;
-        sparkles.rotation.y = tNow * 0.08;
+      if (!pointerDown) {
+        hoveredSlot = getHitSlot(e.clientX, e.clientY);
+        canvas.style.cursor = hoveredSlot >= 0 ? 'pointer' : 'grab';
+        return;
       }
-      // Smooth Damped Interpolation (R3F useFrame damp pattern)
-      bookGroup.rotation.y = THREE.MathUtils.lerp(bookGroup.rotation.y, targetRotY, 0.1);
-      bookGroup.rotation.x = THREE.MathUtils.lerp(bookGroup.rotation.x, targetRotX + Math.sin(tNow * 0.9) * 0.03, 0.1);
+
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > 5) {
+        dragMoved = true;
+      }
+
+      if (inspectionMode) {
+        if (pointerButton === 2 || e.shiftKey) {
+          inspectPanX = THREE.MathUtils.clamp(inspectPanX + dx * 0.0038, -0.95, 0.95);
+          inspectPanY = THREE.MathUtils.clamp(inspectPanY - dy * 0.0038, -0.75, 0.75);
+        } else {
+          inspectYaw += dx * 0.011;
+          inspectPitch = THREE.MathUtils.clamp(inspectPitch + dy * 0.009, -0.78, 0.78);
+        }
+      } else {
+        dragAccumSlots = THREE.MathUtils.clamp(dragAccumSlots - dx * 0.028, 0, totalCount - 1);
+        const nextIdx = Math.round(dragAccumSlots);
+        if (nextIdx !== activeSlotIndex) {
+          selectShelfSlot(nextIdx, false);
+        }
+      }
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      pointerDown = false;
+      if (!dragMoved) {
+        const hitSlot = getHitSlot(e.clientX, e.clientY);
+        if (hitSlot >= 0) {
+          if (hitSlot === activeSlotIndex) {
+            setInspectionMode(!inspectionMode);
+          } else {
+            selectShelfSlot(hitSlot, false);
+          }
+        } else if (inspectionMode) {
+          setInspectionMode(false);
+        }
+      }
+    });
+
+    let wheelLockUntil = 0;
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (inspectionMode) {
+        inspectDistance = THREE.MathUtils.clamp(inspectDistance + e.deltaY * 0.0028, 2.85, 6.2);
+      } else {
+        const now = performance.now();
+        if (now < wheelLockUntil) return;
+        const primaryDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (Math.abs(primaryDelta) < 6) return;
+        wheelLockUntil = now + 115;
+        const step = primaryDelta > 0 ? 1 : -1;
+        selectShelfSlot(activeSlotIndex + step, false);
+      }
+    }, { passive: false });
+
+    let lastTime = performance.now();
+    const animate = () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - lastTime) * 0.001);
+      lastTime = now;
+      const tSec = now * 0.001;
+
+      // Smoothly transition focusProgress (0 = Browse Shelf, 1 = Inspect Book)
+      focusProgress = THREE.MathUtils.damp(focusProgress, inspectionMode ? 1 : 0, 7.5, dt);
+
+      // Update 6-Stage Collision-Free Book Extraction & Shelving State Machine
+      if (choreoStage === 'idle' && queuedSlot !== presentedSlot) {
+        choreoStage = 'retreat-current';
+      }
+
+      const currentRec = bookRecords[presentedSlot];
+      const nextRec = bookRecords[queuedSlot];
+
+      if (choreoStage === 'retreat-current' && currentRec) {
+        currentRec.pose.z = THREE.MathUtils.damp(currentRec.pose.z, 0.56, 16, dt);
+        currentRec.pose.scale = THREE.MathUtils.damp(currentRec.pose.scale, 1.0, 14, dt);
+        if (Math.abs(currentRec.pose.z - 0.56) < 0.025) {
+          choreoStage = 'turn-current';
+        }
+      } else if (choreoStage === 'turn-current' && currentRec) {
+        currentRec.pose.yaw = THREE.MathUtils.damp(currentRec.pose.yaw, Math.PI * 0.5, 16, dt);
+        if (Math.abs(currentRec.pose.yaw - Math.PI * 0.5) < 0.04) {
+          choreoStage = 'shelve-current';
+        }
+      } else if (choreoStage === 'shelve-current' && currentRec) {
+        currentRec.pose.z = THREE.MathUtils.damp(currentRec.pose.z, -0.64, 16, dt);
+        if (Math.abs(currentRec.pose.z - (-0.64)) < 0.03) {
+          currentRec.pose.z = -0.64;
+          currentRec.pose.yaw = Math.PI * 0.5;
+          presentedSlot = queuedSlot;
+          choreoStage = 'extract-next';
+        }
+      } else if (choreoStage === 'extract-next' && currentRec) {
+        if (queuedSlot !== presentedSlot) {
+          choreoStage = 'shelve-current';
+        } else {
+          currentRec.pose.z = THREE.MathUtils.damp(currentRec.pose.z, 0.58, 15, dt);
+          if (Math.abs(currentRec.pose.z - 0.58) < 0.03) {
+            choreoStage = 'turn-next';
+          }
+        }
+      } else if (choreoStage === 'turn-next' && currentRec) {
+        if (queuedSlot !== presentedSlot) {
+          choreoStage = 'retreat-current';
+        } else {
+          currentRec.pose.yaw = THREE.MathUtils.damp(currentRec.pose.yaw, 0, 14, dt);
+          if (Math.abs(currentRec.pose.yaw) < 0.035) {
+            choreoStage = 'settle-next';
+          }
+        }
+      } else if (choreoStage === 'settle-next' && currentRec) {
+        if (queuedSlot !== presentedSlot) {
+          choreoStage = 'retreat-current';
+        } else {
+          currentRec.pose.z = THREE.MathUtils.damp(currentRec.pose.z, 0.40, 13, dt);
+          currentRec.pose.scale = THREE.MathUtils.damp(currentRec.pose.scale, 1.035, 13, dt);
+          if (Math.abs(currentRec.pose.z - 0.40) < 0.015) {
+            currentRec.pose.z = 0.40;
+            currentRec.pose.yaw = 0;
+            currentRec.pose.scale = 1.035;
+            choreoStage = 'idle';
+          }
+        }
+      }
+
+      // Pan the shelf horizontally so the active book is centered
+      const focusRec = bookRecords[queuedSlot] || bookRecords[presentedSlot];
+      shelfTargetX = focusRec ? -focusRec.x : 0;
+      shelfScrollX = THREE.MathUtils.damp(shelfScrollX, shelfTargetX, 7.5, dt);
+      booksGroup.position.x = shelfScrollX;
+      shelfGroup.position.x = shelfScrollX * 0.35;
+
+      // Hide shelf & neighbor books once deep in inspection mode (matching Complete Shelf)
+      const hideShelfInInspect = focusProgress > 0.72;
+      shelfGroup.visible = !hideShelfInInspect;
+
+      bookRecords.forEach((rec) => {
+        const isCurrentPresented = rec.index === presentedSlot;
+        const isHovered = rec.index === hoveredSlot && !inspectionMode && !isCurrentPresented;
+        rec.hover = THREE.MathUtils.damp(rec.hover, isHovered ? 1 : 0, 10, dt);
+
+        rec.slotGroup.visible = !hideShelfInInspect || rec.index === activeSlotIndex || isCurrentPresented;
+
+        if (!isCurrentPresented) {
+          rec.pose.x = THREE.MathUtils.damp(rec.pose.x, 0, 10, dt);
+          rec.pose.y = THREE.MathUtils.damp(rec.pose.y, rec.hover * 0.055, 10, dt);
+          rec.pose.z = THREE.MathUtils.damp(rec.pose.z, -0.64 + rec.hover * 0.14, 10, dt);
+          rec.pose.yaw = THREE.MathUtils.damp(rec.pose.yaw, Math.PI * 0.5, 10, dt);
+          rec.pose.pitch = THREE.MathUtils.damp(rec.pose.pitch, 0, 10, dt);
+          rec.pose.roll = THREE.MathUtils.damp(rec.pose.roll, 0, 10, dt);
+          rec.pose.scale = THREE.MathUtils.damp(rec.pose.scale, 1.0, 10, dt);
+        } else if (inspectionMode || focusProgress > 0.01) {
+          const targetZ = THREE.MathUtils.lerp(0.40, 1.15, focusProgress);
+          const targetYaw = THREE.MathUtils.lerp(0, inspectYaw, focusProgress);
+          const targetPitch = THREE.MathUtils.lerp(0, inspectPitch, focusProgress);
+          const targetScale = THREE.MathUtils.lerp(1.035, 1.12, focusProgress);
+          rec.pose.x = THREE.MathUtils.damp(rec.pose.x, inspectPanX * focusProgress, 11, dt);
+          rec.pose.y = THREE.MathUtils.damp(rec.pose.y, inspectPanY * focusProgress, 11, dt);
+          rec.pose.z = THREE.MathUtils.damp(rec.pose.z, targetZ, 11, dt);
+          rec.pose.yaw = THREE.MathUtils.damp(rec.pose.yaw, targetYaw, 11, dt);
+          rec.pose.pitch = THREE.MathUtils.damp(rec.pose.pitch, targetPitch, 11, dt);
+          rec.pose.scale = THREE.MathUtils.damp(rec.pose.scale, targetScale, 11, dt);
+        } else if (choreoStage === 'idle') {
+          rec.pose.x = THREE.MathUtils.damp(rec.pose.x, 0, 10, dt);
+          rec.pose.y = THREE.MathUtils.damp(rec.pose.y, 0, 10, dt);
+          rec.pose.z = THREE.MathUtils.damp(rec.pose.z, 0.40, 10, dt);
+          rec.pose.yaw = THREE.MathUtils.damp(rec.pose.yaw, 0, 10, dt);
+          rec.pose.pitch = THREE.MathUtils.damp(rec.pose.pitch, 0, 10, dt);
+          rec.pose.scale = THREE.MathUtils.damp(rec.pose.scale, 1.035, 10, dt);
+        }
+
+        rec.bookRoot.position.set(rec.pose.x, rec.pose.y, rec.pose.z);
+        rec.bookRoot.rotation.set(rec.pose.pitch, rec.pose.yaw, rec.pose.roll);
+        rec.bookRoot.scale.setScalar(rec.pose.scale);
+
+        if (rec.livingGlow) {
+          rec.livingGlow.material.opacity = 0.09 + Math.sin(tSec * 2.1 + rec.index) * 0.045;
+        }
+      });
+
+      // Camera Position & Left-Half Frustum Offset during Inspection Mode
+      const targetCamZ = THREE.MathUtils.lerp(6.65, inspectDistance, focusProgress);
+      const targetCamY = THREE.MathUtils.lerp(1.42, 1.38, focusProgress);
+      camera.position.z = THREE.MathUtils.damp(camera.position.z, targetCamZ, 8, dt);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, targetCamY, 8, dt);
+      camera.lookAt(0, 1.28, 0.15);
+
+      const desktopOffset = viewWidth > 860 ? viewWidth * 0.175 * focusProgress : 0;
+      currentOffsetX = THREE.MathUtils.damp(currentOffsetX, desktopOffset, 8, dt);
+      if (Math.abs(currentOffsetX) > 0.5) {
+        camera.setViewOffset(viewWidth, viewHeight, currentOffsetX, 0, viewWidth, viewHeight);
+      } else {
+        camera.clearViewOffset();
+      }
 
       renderer.render(scene, camera);
       requestAnimationFrame(animate);
@@ -460,41 +1680,56 @@ function initOrUpdateR3FStage(book) {
     animate();
 
     r3fStage = {
-      loader,
-      frontMat,
-      spineMat,
-      bookGroup,
-      spinTransition() {
-        targetRotY += Math.PI * 2;
+      focusSlot(slotIdx, inspect = false) {
+        queuedSlot = THREE.MathUtils.clamp(slotIdx, 0, totalCount - 1);
+        if (inspect) {
+          inspectYaw = -0.32;
+          inspectPitch = 0.06;
+          inspectPanX = 0;
+          inspectPanY = 0;
+        }
+      },
+      setInspection(enabled) {
+        if (enabled) {
+          inspectYaw = -0.32;
+          inspectPitch = 0.06;
+          inspectPanX = 0;
+          inspectPanY = 0;
+          inspectDistance = 4.35;
+        }
+      },
+      zoomBy(delta) {
+        inspectDistance = THREE.MathUtils.clamp(inspectDistance + delta, 2.85, 6.2);
+      },
+      resetInspectView() {
+        inspectYaw = -0.32;
+        inspectPitch = 0.06;
+        inspectPanX = 0;
+        inspectPanY = 0;
+        inspectDistance = 4.35;
+      },
+      refreshTextures() {
+        bookRecords.forEach((rec) => {
+          const textures = createClothHardcoverTextures(rec.item, maxAnisotropy);
+          if (rec.frontArtwork?.material) {
+            rec.frontArtwork.material.map?.dispose?.();
+            rec.frontArtwork.material.map = textures.frontMap;
+            rec.frontArtwork.material.needsUpdate = true;
+          }
+          if (rec.backArtwork?.material) {
+            rec.backArtwork.material.map?.dispose?.();
+            rec.backArtwork.material.map = textures.backMap;
+            rec.backArtwork.material.needsUpdate = true;
+          }
+          if (rec.spineArtwork?.material) {
+            rec.spineArtwork.material.map?.dispose?.();
+            rec.spineArtwork.material.map = textures.spineMap;
+            rec.spineArtwork.material.needsUpdate = true;
+          }
+        });
       },
     };
   }
-
-  // Update Book Cover Texture & Spine Color with 360° Showcase Spin
-  const color = /^#[\da-f]{6}$/i.test(book.cover_color || '') ? book.cover_color : '#266653';
-  r3fStage.spineMat.color.set(color);
-
-  if (book.cover_url) {
-    r3fStage.loader.load(
-      book.cover_url,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        r3fStage.frontMat.map = tex;
-        r3fStage.frontMat.color.set(0xffffff);
-        r3fStage.frontMat.needsUpdate = true;
-      },
-      undefined,
-      () => {
-        r3fStage.frontMat.map = createFallbackCoverTexture(book);
-        r3fStage.frontMat.needsUpdate = true;
-      }
-    );
-  } else {
-    r3fStage.frontMat.map = createFallbackCoverTexture(book);
-    r3fStage.frontMat.needsUpdate = true;
-  }
-
-  r3fStage.spinTransition();
 }
 
 async function toggleWishlist(bookId) {
@@ -522,7 +1757,7 @@ async function toggleWishlist(bookId) {
 
 async function showDetails(id) {
   try {
-    selectedBook = books.find((book) => book.id === id) || await api(`/books/${id}`);
+    selectedBook = books.find((book) => book.id === id) || allCatalogBooks.find((book) => book.id === id) || await api(`/books/${id}`);
     const book = selectedBook;
     const detailCover = document.querySelector('#detail-cover');
     detailCover.style.background = book.cover_color || '#266653';
@@ -625,6 +1860,10 @@ async function openReader(book = selectedBook, targetPage = null) {
       currentPage = Math.min(Number(targetPage || progress.last_page) || 1, pages.length);
     }
     document.querySelector('#reader-dialog').showModal();
+    if (pageFlip) {
+      try { pageFlip.destroy(); } catch { /* ignore */ }
+      pageFlip = null;
+    }
     if (window.St?.PageFlip) {
       pageFlip = new window.St.PageFlip(host, {
         width: 430,
@@ -747,7 +1986,7 @@ async function loadContinueReading() {
   section.hidden = !Object.keys(saved).length;
   const locale = currentLang === 'th' ? 'th-TH' : 'lo-LA';
   document.querySelector('#continue-list').innerHTML = Object.entries(saved).map(([id, page]) => {
-    const book = books.find((item) => item.id === Number(id));
+    const book = books.find((item) => item.id === Number(id)) || allCatalogBooks.find((item) => item.id === Number(id));
     return book ? `<button type="button" class="continue-chip" data-continue="${book.id}">${escapeHtml(book.title)} · ${t('reader.page')} ${new Intl.NumberFormat(locale).format(page)}</button>` : '';
   }).join('');
   document.querySelectorAll('[data-continue]').forEach((button) => {
@@ -789,9 +2028,10 @@ async function openBookmarks() {
 }
 
 async function openCustomerOrders() {
-  if (!authToken) return openAuth(false);
+  if (!authToken && !guestOrderIds.length) return openAuth(false);
   try {
-    const orders = await api('/orders');
+    const query = guestOrderIds.length ? `?ids=${guestOrderIds.join(',')}` : '';
+    const orders = await api(`/orders${query}`);
     const list = document.querySelector('#customer-orders-list');
     const locale = currentLang === 'th' ? 'th-TH' : 'lo-LA';
     list.innerHTML = orders.length
@@ -813,7 +2053,8 @@ async function openCustomerOrders() {
 
 async function createBook(event) {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
+  const formEl = event.currentTarget;
+  const data = new FormData(formEl);
   const pages = String(data.get('pages_text')).split(/^\s*---\s*$/m).map((part) => {
     const lines = part.trim().split('\n');
     return { title: lines.shift() || '', content: lines.join('\n').trim() };
@@ -833,7 +2074,7 @@ async function createBook(event) {
       }),
     });
     document.querySelector('#admin-dialog').close();
-    event.currentTarget.reset();
+    formEl?.reset();
     await loadBooks();
     notify(t('admin.bookSaved'));
   } catch (error) {
@@ -944,6 +2185,7 @@ function renderCart() {
 }
 
 async function openCart() {
+  document.querySelector('#checkout-error').textContent = '';
   if (cart.length) {
     try {
       const latest = await api('/shop/products');
@@ -1037,7 +2279,8 @@ async function openDashboard() {
 
 async function createProduct(event) {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
+  const formEl = event.currentTarget;
+  const data = new FormData(formEl);
   try {
     await api('/admin/products', {
       method: 'POST',
@@ -1054,24 +2297,28 @@ async function createProduct(event) {
         language: currentLang,
       }),
     });
-    event.currentTarget.reset();
+    formEl?.reset();
     document.querySelector('#product-dialog').close();
     await loadBooks();
     notify(t('common.success'));
   } catch (error) {
-    document.querySelector('#product-error').textContent = t(`auth.${error.key}`) || error.message;
+    document.querySelector('#product-error').textContent = lookupTranslation(`auth.${error.key}`) || error.message;
   }
 }
 
 async function submitOrder(event) {
   event.preventDefault();
-  if (!authToken) {
-    document.querySelector('#cart-dialog').close();
-    return openAuth(false);
+  const formEl = event.currentTarget || document.querySelector('#checkout-form');
+  const submitBtn = document.querySelector('#checkout-submit');
+  document.querySelector('#checkout-error').textContent = '';
+  if (!cart.length) {
+    document.querySelector('#checkout-error').textContent = t('shop.emptyCart');
+    return;
   }
-  const data = new FormData(event.currentTarget);
+  const data = new FormData(formEl);
+  if (submitBtn) submitBtn.disabled = true;
   try {
-    await api('/orders', {
+    const result = await api('/orders', {
       method: 'POST',
       body: JSON.stringify({
         customer_name: data.get('customer_name'),
@@ -1080,14 +2327,23 @@ async function submitOrder(event) {
         items: cart.map((item) => ({ book_id: item.id, quantity: item.quantity })),
       }),
     });
+    if (result?.id && !guestOrderIds.includes(Number(result.id))) {
+      guestOrderIds.unshift(Number(result.id));
+      localStorage.setItem('ebook-guest-orders', JSON.stringify(guestOrderIds.slice(0, 50)));
+    }
     cart = [];
     saveCart();
-    event.currentTarget.reset();
+    renderCart();
+    updateAccount();
+    formEl?.reset();
     document.querySelector('#cart-dialog').close();
-    await loadBooks();
     notify(t('shop.orderSuccess'));
+    await loadBooks();
   } catch (error) {
-    document.querySelector('#checkout-error').textContent = t(`shop.${error.key}`) || t(`auth.${error.key}`) || error.message;
+    if (submitBtn) submitBtn.disabled = !cart.length;
+    document.querySelector('#checkout-error').textContent = lookupTranslation(`shop.${error.key}`)
+      || lookupTranslation(`auth.${error.key}`)
+      || error.message;
   }
 }
 
@@ -1132,6 +2388,54 @@ function bindEvents() {
   document.querySelector('#lang-toggle')?.addEventListener('click', () => {
     switchLanguage(currentLang === 'lo' ? 'th' : 'lo');
   });
+
+  // "The Complete Shelf" Controls: Prev/Next, Pull-Forward Inspection, Zoom, Reset & Keyboard
+  document.querySelector('#shelf-prev')?.addEventListener('click', () => {
+    selectShelfSlot(activeSlotIndex - 1, inspectionMode);
+  });
+  document.querySelector('#shelf-next')?.addEventListener('click', () => {
+    selectShelfSlot(activeSlotIndex + 1, inspectionMode);
+  });
+  document.querySelector('#shelf-inspect-toggle')?.addEventListener('click', () => {
+    setInspectionMode(!inspectionMode);
+  });
+  document.querySelector('#inspect-zoom-in')?.addEventListener('click', () => {
+    r3fStage?.zoomBy(-0.55);
+  });
+  document.querySelector('#inspect-zoom-out')?.addEventListener('click', () => {
+    r3fStage?.zoomBy(0.55);
+  });
+  document.querySelector('#inspect-reset')?.addEventListener('click', () => {
+    r3fStage?.resetInspectView();
+  });
+  document.querySelector('#inspect-return')?.addEventListener('click', () => {
+    setInspectionMode(false);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName || '';
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.querySelector('dialog[open]')) return;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      selectShelfSlot(activeSlotIndex - 1, inspectionMode);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      selectShelfSlot(activeSlotIndex + 1, inspectionMode);
+    } else if (e.key === 'Enter' && document.activeElement?.id === 'hero-book') {
+      e.preventDefault();
+      setInspectionMode(!inspectionMode);
+    } else if (e.key === 'Escape' && inspectionMode) {
+      e.preventDefault();
+      setInspectionMode(false);
+    }
+  });
+
+  window.addEventListener('scroll', () => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const sy = window.scrollY || 0;
+    const headingOffset = Math.max(-18, Math.min(18, (sy - 320) * -0.04));
+    document.documentElement.style.setProperty('--scroll-heading-y', `${headingOffset.toFixed(1)}px`);
+  }, { passive: true });
 
   // Paper Theme & Font Size Controls in 3D Reader
   document.querySelectorAll('[data-paper-mode]').forEach((btn) => {
@@ -1188,7 +2492,12 @@ function bindEvents() {
 async function init() {
   try {
     const langFile = currentLang === 'th' ? './th.json' : './lo.json';
-    strings = await fetch(langFile).then((response) => response.json());
+    const [loadedStrings, loadedManifest] = await Promise.all([
+      fetch(langFile).then((response) => response.json()),
+      fetch('./shelf-manifest.json').then((response) => response.json()).catch(() => ({ items: [] })),
+    ]);
+    strings = loadedStrings;
+    shelfManifest = loadedManifest;
     applyTranslations();
     updateAccount();
     bindEvents();

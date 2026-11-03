@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <rect width="600" height="840" fill="url(#bg5)"/>
-  <!-- Zen Enso Circle & Lotus Geometry -->
+  <!-- Zen Enso Circle &amp; Lotus Geometry -->
   <circle cx="300" cy="405" r="135" fill="none" stroke="#266653" stroke-width="14" stroke-linecap="round" stroke-dasharray="720 140"/>
   <circle cx="300" cy="405" r="95" fill="#d97706" opacity="0.18"/>
   <path d="M 300 315 C 335 365 335 425 300 465 C 265 425 265 365 300 315 Z" fill="#266653" opacity="0.85"/>

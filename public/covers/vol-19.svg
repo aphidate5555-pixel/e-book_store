@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#365943"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#c7a45e" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#eee7d6" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#c7a45e" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">ຄະນະບັນນາທິການ</text>
+  <text x="80" y="172" fill="#eee7d6" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">E-bookshop ສະບັບຄົບຊຸດ</text>
+  <text x="80" y="214" fill="#c7a45e" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ຄົບຮອບພິເສດ</text>
+  <g transform="translate(300, 465)">
+    <circle r="118" stroke="#c7a45e" stroke-width="3.5" fill="none"/><circle cx="-36" cy="0" r="68" stroke="#eee7d6" stroke-width="2.5" fill="none"/><circle cx="36" cy="0" r="68" stroke="#eee7d6" stroke-width="2.5" fill="none"/><circle cx="0" cy="-36" r="68" stroke="#c7a45e" stroke-width="2.5" fill="none"/><circle cx="0" cy="36" r="68" stroke="#c7a45e" stroke-width="2.5" fill="none"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#c7a45e" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#eee7d6" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#c7a45e" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 19</text>
+</svg>
