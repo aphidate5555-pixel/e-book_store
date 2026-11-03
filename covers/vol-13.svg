@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#d8bd8c"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#8e2f36" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#272523" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#8e2f36" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">ຫໍພິພິທະພັນສິລະປະສິ່ງທໍ</text>
+  <text x="80" y="172" fill="#272523" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ລວດລາຍຜ້າໄໝລ້ານຊ້າງ</text>
+  <text x="80" y="214" fill="#8e2f36" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ສິລະປະ &amp; ວັດທະນະທຳ</text>
+  <g transform="translate(300, 465)">
+    <polyline points="-110,70 15,-55 115,-55" stroke="#8e2f36" stroke-width="5" fill="none"/><polyline points="-110,110 15,-15 115,-15" stroke="#272523" stroke-width="3.5" fill="none"/><polyline points="-110,30 15,-95 115,-95" stroke="#8e2f36" stroke-width="3.5" fill="none"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#8e2f36" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#272523" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#8e2f36" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 13</text>
+</svg>

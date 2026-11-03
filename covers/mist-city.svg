@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1025"/>
+      <stop offset="45%" stop-color="#3b1d5e"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="50%" cy="38%" r="36%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.95"/>
+      <stop offset="35%" stop-color="#f59e0b" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#c084fc" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mist" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e9d5ff" stop-opacity="0.05"/>
+      <stop offset="50%" stop-color="#f3e8ff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#e9d5ff" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="840" fill="url(#bg2)"/>
+  <circle cx="300" cy="330" r="220" fill="url(#moon)"/>
+  <circle cx="300" cy="330" r="82" fill="#fef9c3" opacity="0.92"/>
+  <!-- Pagoda / Ancient City Silhouette -->
+  <g fill="#120b1d">
+    <polygon points="80,640 180,470 290,640"/>
+    <polygon points="320,640 440,450 550,640"/>
+    <polygon points="240,640 300,360 360,640"/>
+    <polygon points="255,420 300,390 345,420"/>
+    <polygon points="268,380 300,352 332,380"/>
+    <line x1="300" y1="310" x2="300" y2="360" stroke="#fef08a" stroke-width="3"/>
+    <rect x="0" y="610" width="600" height="230"/>
+  </g>
+  <!-- Mist Layers -->
+  <ellipse cx="300" cy="535" rx="280" ry="26" fill="url(#mist)"/>
+  <ellipse cx="260" cy="585" rx="310" ry="34" fill="url(#mist)"/>
+  <ellipse cx="340" cy="480" rx="220" ry="18" fill="url(#mist)"/>
+  <!-- Frame -->
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#e9d5ff" stroke-width="1.5" opacity="0.5"/>
+  <rect x="48" y="48" width="504" height="744" fill="none" stroke="#fde047" stroke-width="0.8" opacity="0.4"/>
+  <!-- Typography -->
+  <text x="300" y="108" text-anchor="middle" fill="#e9d5ff" font-family="Georgia, serif" font-size="14" letter-spacing="5">FANTASY CHRONICLES</text>
+  <text x="300" y="175" text-anchor="middle" fill="#ffffff" font-family="'Noto Sans Lao', sans-serif" font-size="48" font-weight="800">ເມືອງໃນໝອກ</text>
+  <text x="300" y="216" text-anchor="middle" fill="#fde047" font-family="Georgia, serif" font-size="20" font-style="italic">The City Beyond the Silver Mist</text>
+  <text x="300" y="705" text-anchor="middle" fill="#d8b4fe" font-family="'Noto Sans Lao', sans-serif" font-size="18">ນິຍາຍແຟນຕາຊີລຶກລັບແຫ່ງຫຸບເຂົາເໜືອ</text>
+  <text x="300" y="752" text-anchor="middle" fill="#fef08a" font-family="'Noto Sans Lao', sans-serif" font-size="16" font-weight="700" letter-spacing="2">ທີມຜູ້ຂຽນ B</text>
+</svg>

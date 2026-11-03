@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#626a49"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#9c3d39" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#eee5cf" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#9c3d39" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">KENJI &amp; LAO STUDIO</text>
+  <text x="80" y="172" fill="#eee5cf" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ວິຖີແຫ່ງນັກດາບ</text>
+  <text x="80" y="214" fill="#9c3d39" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ກາຕູນມັງງະ</text>
+  <g transform="translate(300, 465)">
+    <circle r="118" stroke="#9c3d39" stroke-width="3.5" fill="none"/><rect x="-82" y="-82" width="164" height="164" stroke="#eee5cf" stroke-width="2.5" fill="none"/><line x1="-130" y1="0" x2="130" y2="0" stroke="#9c3d39" stroke-width="2"/><line x1="0" y1="-130" x2="0" y2="130" stroke="#9c3d39" stroke-width="2"/><circle r="20" fill="#9c3d39"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#9c3d39" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#eee5cf" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#9c3d39" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 15</text>
+</svg>

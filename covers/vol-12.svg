@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#262421"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#f16f5b" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#d9edf0" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#f16f5b" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">ດຣ. ສົມພອນ ພັດທະນາ</text>
+  <text x="80" y="172" fill="#d9edf0" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ຄວາມງຽບສະຫງົບຍາມເຊົ້າ</text>
+  <text x="80" y="214" fill="#f16f5b" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ຄວາມລຽງ</text>
+  <g transform="translate(300, 465)">
+    <circle r="125" stroke="#f16f5b" stroke-width="2.5" opacity="0.5" fill="none"/><polygon points="0,-130 28,-38 122,-52 48,18 96,105 0,52 -96,105 -48,18 -122,-52 -28,-38" stroke="#f16f5b" stroke-width="3.5" fill="#f16f5b" fill-opacity="0.18"/><circle r="26" fill="#d9edf0"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#f16f5b" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#d9edf0" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#f16f5b" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 12</text>
+</svg>

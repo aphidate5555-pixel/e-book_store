@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <defs>
+    <linearGradient id="bg5" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f5efe6"/>
+      <stop offset="100%" stop-color="#e6dec8"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="840" fill="url(#bg5)"/>
+  <!-- Zen Enso Circle &amp; Lotus Geometry -->
+  <circle cx="300" cy="405" r="135" fill="none" stroke="#266653" stroke-width="14" stroke-linecap="round" stroke-dasharray="720 140"/>
+  <circle cx="300" cy="405" r="95" fill="#d97706" opacity="0.18"/>
+  <path d="M 300 315 C 335 365 335 425 300 465 C 265 425 265 365 300 315 Z" fill="#266653" opacity="0.85"/>
+  <path d="M 300 465 C 350 445 385 395 365 345 C 330 365 310 415 300 465 Z" fill="#266653" opacity="0.55"/>
+  <path d="M 300 465 C 250 445 215 395 235 345 C 270 365 290 415 300 465 Z" fill="#266653" opacity="0.55"/>
+  <!-- Editorial Borders -->
+  <rect x="38" y="38" width="524" height="764" fill="none" stroke="#266653" stroke-width="2" opacity="0.55"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#b45309" stroke-width="0.8" opacity="0.4"/>
+  <!-- Typography -->
+  <text x="300" y="108" text-anchor="middle" fill="#b45309" font-family="sans-serif" font-size="14" font-weight="700" letter-spacing="5">MINDFUL PRODUCTIVITY</text>
+  <text x="300" y="175" text-anchor="middle" fill="#1c2924" font-family="'Noto Sans Lao', sans-serif" font-size="44" font-weight="800">ສິລະປະແຫ່ງສະມາທິ</text>
+  <text x="300" y="216" text-anchor="middle" fill="#266653" font-family="Georgia, serif" font-size="21" font-style="italic">The Art of Deep Focus &amp; Calm</text>
+  <line x1="220" y1="620" x2="380" y2="620" stroke="#266653" stroke-width="1.5" opacity="0.5"/>
+  <text x="300" y="675" text-anchor="middle" fill="#3f4f48" font-family="'Noto Sans Lao', sans-serif" font-size="19">ປ່ຽນຊີວິດ ແລະ ການເຮັດວຽກດ້ວຍສະຕິ</text>
+  <text x="300" y="745" text-anchor="middle" fill="#b45309" font-family="'Noto Sans Lao', sans-serif" font-size="16" font-weight="700" letter-spacing="2">ດຣ. สมพร ພັດທະນາ</text>
+</svg>

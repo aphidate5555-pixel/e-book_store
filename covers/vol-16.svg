@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <rect width="600" height="840" fill="#1d4fa8"/>
+  <rect x="36" y="36" width="528" height="768" fill="none" stroke="#d6df45" stroke-width="3" opacity="0.85"/>
+  <rect x="50" y="50" width="500" height="740" fill="none" stroke="#f3efe3" stroke-width="1.2" opacity="0.35"/>
+  <rect x="0" y="0" width="28" height="840" fill="#000000" opacity="0.22"/>
+  <text x="80" y="112" fill="#d6df45" font-family="'Noto Sans Lao', sans-serif" font-size="17" font-weight="700" letter-spacing="2">AKIRA &amp; CYBER ART</text>
+  <text x="80" y="172" fill="#f3efe3" font-family="'Noto Serif Lao', Georgia, serif" font-size="31" font-weight="700">ສະຖາປັດຕະຍະກຳແຫ່ງຄວາມຊົງຈຳ</text>
+  <text x="80" y="214" fill="#d6df45" font-family="'Noto Sans Lao', sans-serif" font-size="18" font-weight="500">ສະບັບປົກແຂງ · ນິຍາຍວິທະຍາສາດ</text>
+  <g transform="translate(300, 465)">
+    <line x1="0" y1="125" x2="0" y2="-125" stroke="#d6df45" stroke-width="4"/><path d="M0,60 Q55,20 105,35 M0,60 Q-55,20 -105,35 M0,0 Q65,-40 115,-25 M0,0 Q-65,-40 -115,-25 M0,-60 Q50,-95 95,-85 M0,-60 Q-50,-95 -95,-85" stroke="#f3efe3" stroke-width="3.2" fill="none"/>
+  </g>
+  <line x1="80" y1="692" x2="520" y2="692" stroke="#d6df45" stroke-width="1.5" opacity="0.6"/>
+  <text x="80" y="742" fill="#f3efe3" font-family="Georgia, serif" font-size="16" letter-spacing="3">E-BOOKSHOP EDITIONS</text>
+  <text x="520" y="742" text-anchor="end" fill="#d6df45" font-family="Georgia, serif" font-size="18" font-weight="700">NO. 16</text>
+</svg>

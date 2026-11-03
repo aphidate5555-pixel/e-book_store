@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 840" width="600" height="840">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#450a0a"/>
+      <stop offset="50%" stop-color="#991b1b"/>
+      <stop offset="100%" stop-color="#1c1917"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="840" fill="url(#bg4)"/>
+  <!-- Manga Speed Lines &amp; Sunburst -->
+  <circle cx="300" cy="410" r="170" fill="#ef4444" opacity="0.22"/>
+  <circle cx="300" cy="410" r="130" fill="#fef08a" opacity="0.9"/>
+  <!-- Dynamic Lightning &amp; Katana Slash -->
+  <polygon points="110,590 485,215 510,240 135,615" fill="url(#blade)"/>
+  <polyline points="160,310 260,370 220,430 370,480 320,550 450,600" fill="none" stroke="#38bdf8" stroke-width="5"/>
+  <polyline points="420,250 330,340 380,390 250,510" fill="none" stroke="#fde047" stroke-width="4"/>
+  <!-- Frame -->
+  <rect x="30" y="30" width="540" height="780" fill="none" stroke="#fef08a" stroke-width="3"/>
+  <rect x="44" y="44" width="512" height="752" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.4"/>
+  <!-- Manga Volume Badge -->
+  <circle cx="490" cy="115" r="42" fill="#fde047"/>
+  <text x="490" y="110" text-anchor="middle" fill="#450a0a" font-family="sans-serif" font-size="13" font-weight="800">VOL.</text>
+  <text x="490" y="134" text-anchor="middle" fill="#450a0a" font-family="sans-serif" font-size="26" font-weight="900">01</text>
+  <!-- Typography -->
+  <text x="300" y="102" text-anchor="middle" fill="#fca5a5" font-family="sans-serif" font-size="15" font-weight="800" letter-spacing="5">ACTION FANTASY MANGA</text>
+  <text x="300" y="172" text-anchor="middle" fill="#ffffff" font-family="'Noto Sans Lao', sans-serif" font-size="46" font-weight="900">ນັກຮົບມັງກອນສາຍຟ້າ</text>
+  <text x="300" y="214" text-anchor="middle" fill="#38bdf8" font-family="sans-serif" font-size="20" font-weight="800" letter-spacing="3">THUNDER DRAGON BLADE</text>
+  <text x="300" y="705" text-anchor="middle" fill="#fecaca" font-family="'Noto Sans Lao', sans-serif" font-size="19" font-weight="600">ກາຕູນແອັກຊັນຜະຈົນໄພ ພາບສີຄົມຊັດ</text>
+  <text x="300" y="752" text-anchor="middle" fill="#fde047" font-family="'Noto Sans Lao', sans-serif" font-size="16" font-weight="800" letter-spacing="2">KENJI &amp; LAO STUDIO</text>
+</svg>
